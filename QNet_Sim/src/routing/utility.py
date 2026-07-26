@@ -1,15 +1,23 @@
 class UtilityModel:
     @staticmethod
-    def calculate(request_weight: float, fidelity: float, success_probability: float,
-                  latency: float, bell_pair_cost: int) -> float:
-        """Score a bundle by weighted successful fidelity per latency and Bell-pair cost."""
-        if latency < 0:
-            raise ValueError("Latency must be nonnegative")
-        if bell_pair_cost < 0:
-            raise ValueError("Bell-pair cost must be nonnegative")
+    def calculate(
+        request_weight: float,
+        fidelity: float,
+        min_required_fidelity: float,
+        success_probability: float,
+        latency: float,
+        bell_pair_cost: int,
+        lambda_latency: float = 1.0,
+        lambda_cost: float = 1.0,
+    ) -> float:
+        """Utility defined in the QiOpt4QNet proposal."""
 
-        denominator = latency + bell_pair_cost
-        if denominator == 0:
-            return 0.0
+        fidelity_margin = max(0.0, fidelity - min_required_fidelity)
 
-        return request_weight * fidelity * success_probability / denominator
+        return (
+            request_weight
+            * success_probability
+            * (1.0 + fidelity_margin)
+            - lambda_latency * latency
+            - lambda_cost * bell_pair_cost
+        )

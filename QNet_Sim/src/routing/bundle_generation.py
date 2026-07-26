@@ -90,12 +90,13 @@ class BundleGenerator:
             memory_demand=MemoryDemandModel.total_memory_demand(total_bell_pairs),
             edge_demand=total_bell_pairs,
             success_probability=success_probability,
-            utility=UtilityModel.calculate(
-                request.weight,
-                end_fidelity,
-                success_probability,
-                total_latency,
-                total_bell_pairs
+            utility = UtilityModel.calculate(
+                request_weight=request.weight,
+                fidelity=end_fidelity,
+                min_required_fidelity=request.minimum_fidelity,
+                success_probability=success_probability,
+                latency=total_latency,
+                bell_pair_cost=total_bell_pairs,
             )
         )
 

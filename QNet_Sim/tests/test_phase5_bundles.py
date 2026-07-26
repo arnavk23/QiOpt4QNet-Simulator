@@ -29,6 +29,17 @@ def test_bundle_generation():
     costs = [b.bell_pair_cost for b in bundles]
     assert sorted(costs) == [2, 4, 8]
 
+    # Generated bundles retain the identifiers and core schema required by the
+    # later optimizer stages.
+    assert {b.request_id for b in bundles} == {request.request_id}
+    assert len({b.bundle_id for b in bundles}) == len(bundles)
+    for bundle in bundles:
+        assert bundle.bundle_id.startswith(f"{request.request_id}_bundle_")
+        assert bundle.path == paths[0]
+        assert isinstance(bundle.memory_demand, int)
+        assert isinstance(bundle.edge_demand, int)
+        assert isinstance(bundle.utility, float)
+
 def test_dominated_pruning():
     generator = BundleGenerator(QuantumNetwork())
     req = Request("A", "C", 0.5)
