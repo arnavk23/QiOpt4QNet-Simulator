@@ -3,6 +3,9 @@ from typing import List, Optional
 from network.network import QuantumNetwork
 from network.request import Request
 from fidelity.fidelity_model import FidelityModel
+from routing.memory_demand import MemoryDemandModel
+from routing.success_probability import SuccessProbabilityModel
+from routing.utility import UtilityModel
 
 @dataclass
 class Bundle:
@@ -12,6 +15,12 @@ class Bundle:
     fidelity: float
     latency: float
     bell_pair_cost: int
+    request_id: str = ""
+    bundle_id: str = ""
+    memory_demand: int = 0
+    edge_demand: int = 0
+    utility: float = 0.0
+    success_probability: float = 0.0
 
 class BundleGenerator:
     def __init__(self, network: QuantumNetwork):
@@ -24,6 +33,7 @@ class BundleGenerator:
             for q in [0, 1, 2]:
                 bundle = self._evaluate_bundle(request, path, q)
                 if bundle and bundle.fidelity >= request.minimum_fidelity:
+                    bundle.bundle_id = f"{request.request_id}_bundle_{len(bundles)}"
                     bundles.append(bundle)
         
         return self.prune_dominated_bundles(bundles)
@@ -33,6 +43,7 @@ class BundleGenerator:
             return None
             
         link_fidelities = []
+        link_success_probabilities = []
         total_latency = 0.0
         total_bell_pairs = 0
         
@@ -49,6 +60,13 @@ class BundleGenerator:
                 f = FidelityModel.purification_bbpssw(f)
                 
             link_fidelities.append(f)
+            link_success_probabilities.append(
+                SuccessProbabilityModel.link_success_probability(
+                    edge_data.generation_probability,
+                    edge_data.raw_fidelity,
+                    q
+                )
+            )
             
             cost = 2 ** q 
             total_bell_pairs += cost
@@ -57,6 +75,9 @@ class BundleGenerator:
 
         # Calculate end-to-end fidelity after swapping
         end_fidelity = FidelityModel.end_to_end_fidelity(link_fidelities)
+        success_probability = SuccessProbabilityModel.path_success_probability(
+            link_success_probabilities
+        )
         
         return Bundle(
             request=request,
@@ -64,7 +85,18 @@ class BundleGenerator:
             purification_rounds=q,
             fidelity=end_fidelity,
             latency=total_latency,
-            bell_pair_cost=total_bell_pairs
+            bell_pair_cost=total_bell_pairs,
+            request_id=request.request_id,
+            memory_demand=MemoryDemandModel.total_memory_demand(total_bell_pairs),
+            edge_demand=total_bell_pairs,
+            success_probability=success_probability,
+            utility=UtilityModel.calculate(
+                request.weight,
+                end_fidelity,
+                success_probability,
+                total_latency,
+                total_bell_pairs
+            )
         )
 
     def prune_dominated_bundles(self, bundles: List[Bundle]) -> List[Bundle]:
