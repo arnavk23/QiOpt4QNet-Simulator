@@ -6,11 +6,6 @@ class QUBOOptimizer:
         "bundle_id",
         "request_id",
         "path",
-        "purification_profile",
-        "final_fidelity",
-        "success_probability",
-        "latency",
-        "bell_pair_cost",
         "edge_demands",
         "memory_demands",
         "utility"
@@ -24,7 +19,7 @@ class QUBOOptimizer:
         self.bundles = bundles
         self._bundle_review()
         self.edge_capacities = self._clean_edge_capacities(edge_capacities)
-        self.memory_capacities = memory_capacities
+        self.memory_capacities = self._clean_memory_capacities(memory_capacities)
         self.bundles_by_request = self._group_bundles()
         self.variables = self._binary_variables()
         self.variable_map = self._create_variable_map()
@@ -49,11 +44,22 @@ class QUBOOptimizer:
     def _clean_edge_capacities(self, edge_capacities):
         capacities = {}
         for edge, capacity in edge_capacities.items():
+            if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 0:
+                raise ValueError("Edge capacity must be a nonnegative integer")
             edge = self._undirected_edge(edge)
             if edge in capacities:
                 raise ValueError(f"Edge {edge} has duplicate capacities")
             capacities[edge] = capacity
         return capacities
+
+    @staticmethod
+    def _clean_memory_capacities(memory_capacities):
+        for node, capacity in memory_capacities.items():
+            if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 0:
+                raise ValueError(
+                    f"Memory capacity for node {node} must be a nonnegative integer"
+                )
+        return memory_capacities
     
     def _group_bundles(self):
         groups = {}

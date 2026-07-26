@@ -1,5 +1,7 @@
 class QuantumLink:
-    def __init__(self, source: str, destination: str, distance: float, generation_probability: float, raw_fidelity: float, latency: float, capacity: float):
+    def __init__(self, source: str, destination: str, distance: float, generation_probability: float, raw_fidelity: float, latency: float, capacity: int):
+        if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 0:
+            raise ValueError("Link capacity must be a nonnegative integer")
         self.source = source
         self.destination = destination
         self.distance = distance
@@ -12,4 +14,3 @@ class QuantumLink:
         return (f"QuantumLink({self.source} -> {self.destination}, " 
                 f"F={self.raw_fidelity}, P={self.generation_probability}, "
                 f"C={self.capacity})")
-

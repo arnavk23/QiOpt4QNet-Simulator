@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 from network.network import QuantumNetwork
 from network.request import Request
 from fidelity.fidelity_model import FidelityModel
@@ -19,6 +19,9 @@ class Bundle:
     bundle_id: str = ""
     memory_demand: int = 0
     edge_demand: int = 0
+    purification_profile: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    edge_demands: Dict[Tuple[str, str], int] = field(default_factory=dict)
+    memory_demands: Dict[str, int] = field(default_factory=dict)
     utility: float = 0.0
     success_probability: float = 0.0
 
@@ -44,12 +47,15 @@ class BundleGenerator:
             
         link_fidelities = []
         link_success_probabilities = []
+        purification_profile = {}
+        edge_demands = {}
         total_latency = 0.0
         total_bell_pairs = 0
         
         # Calculate properties for each link in the path
         for i in range(len(path) - 1):
             u, v = path[i], path[i+1]
+            edge = tuple(sorted((u, v)))
             edge_data = self.network.graph[u][v]['data']
             
             # Base raw fidelity
@@ -69,6 +75,8 @@ class BundleGenerator:
             )
             
             cost = 2 ** q 
+            purification_profile[edge] = q
+            edge_demands[edge] = cost
             total_bell_pairs += cost
             
             total_latency += edge_data.latency * cost
@@ -78,6 +86,7 @@ class BundleGenerator:
         success_probability = SuccessProbabilityModel.path_success_probability(
             link_success_probabilities
         )
+        memory_demands = MemoryDemandModel.per_node_memory_demand(edge_demands)
         
         return Bundle(
             request=request,
@@ -87,8 +96,11 @@ class BundleGenerator:
             latency=total_latency,
             bell_pair_cost=total_bell_pairs,
             request_id=request.request_id,
-            memory_demand=MemoryDemandModel.total_memory_demand(total_bell_pairs),
+            memory_demand=sum(memory_demands.values()),
             edge_demand=total_bell_pairs,
+            purification_profile=purification_profile,
+            edge_demands=edge_demands,
+            memory_demands=memory_demands,
             success_probability=success_probability,
             utility = UtilityModel.calculate(
                 request_weight=request.weight,

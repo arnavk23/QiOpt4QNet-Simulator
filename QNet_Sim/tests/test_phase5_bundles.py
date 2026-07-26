@@ -39,6 +39,16 @@ def test_bundle_generation():
         assert isinstance(bundle.memory_demand, int)
         assert isinstance(bundle.edge_demand, int)
         assert isinstance(bundle.utility, float)
+        assert set(bundle.purification_profile) == {("A", "B"), ("B", "C")}
+        assert bundle.edge_demands == {
+            edge: 2 ** bundle.purification_rounds
+            for edge in bundle.purification_profile
+        }
+        assert bundle.memory_demands == {
+            "A": 2 ** bundle.purification_rounds,
+            "B": 2 * 2 ** bundle.purification_rounds,
+            "C": 2 ** bundle.purification_rounds,
+        }
 
 def test_dominated_pruning():
     generator = BundleGenerator(QuantumNetwork())

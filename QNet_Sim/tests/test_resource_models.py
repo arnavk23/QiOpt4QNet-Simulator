@@ -3,6 +3,8 @@ import math
 from routing.memory_demand import MemoryDemandModel
 from routing.success_probability import SuccessProbabilityModel
 from routing.utility import UtilityModel
+from network.link import QuantumLink
+from network.node import QuantumNode
 
 
 def test_success_probability_accounts_for_generation_and_purification():
@@ -31,6 +33,36 @@ def test_memory_demand_is_two_qubits_per_bell_pair():
         assert "nonnegative" in str(error)
     else:
         raise AssertionError("Negative Bell-pair costs must be rejected")
+
+
+def test_resource_demands_are_tracked_per_edge_and_node():
+    edge_demands = {("A", "B"): 2, ("B", "C"): 1}
+
+    assert MemoryDemandModel.per_node_memory_demand(edge_demands) == {
+        "A": 2,
+        "B": 3,
+        "C": 1,
+    }
+
+
+def test_capacities_must_be_nonnegative_integers():
+    QuantumLink("A", "B", 1.0, 1.0, 0.9, 1.0, 0)
+    QuantumNode("A", 0)
+
+    for capacity in (-1, 1.5):
+        try:
+            QuantumLink("A", "B", 1.0, 1.0, 0.9, 1.0, capacity)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid link capacity must be rejected")
+
+        try:
+            QuantumNode("A", capacity)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid memory capacity must be rejected")
 
 
 def test_utility_matches_the_proposal_equation():
