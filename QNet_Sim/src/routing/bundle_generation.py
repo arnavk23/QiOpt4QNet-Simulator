@@ -25,6 +25,35 @@ class Bundle:
     utility: float = 0.0
     success_probability: float = 0.0
 
+    def to_dict(self) -> Dict:
+        return {
+            "request_id": self.request_id,
+            "bundle_id": self.bundle_id,
+            "path": self.path,
+            "purification_rounds": self.purification_rounds,
+            "fidelity": self.fidelity,
+            "latency": self.latency,
+            "bell_pair_cost": self.bell_pair_cost,
+            "memory_demand": self.memory_demand,
+            "edge_demand": self.edge_demand,
+            "purification_profile": self.purification_profile,
+            "edge_demands": self.edge_demands,
+            "memory_demands": self.memory_demands,
+            "utility": self.utility,
+            "success_probability": self.success_probability,
+        }
+
+    def to_optimizer_dict(self) -> Dict:
+        """Returns a dictionary formatted specifically for QUBOOptimizer."""
+        return {
+            "bundle_id": self.bundle_id,
+            "request_id": self.request_id,
+            "path": self.path,
+            "edge_demands": self.edge_demands,
+            "memory_demands": self.memory_demands,
+            "utility": self.utility,
+        }
+
 class BundleGenerator:
     def __init__(self, network: QuantumNetwork):
         self.network = network
@@ -131,12 +160,16 @@ class BundleGenerator:
                 better_fid = b_other.fidelity >= b_candidate.fidelity
                 better_cost = b_other.bell_pair_cost <= b_candidate.bell_pair_cost
                 better_lat = b_other.latency <= b_candidate.latency
+                better_prob = b_other.success_probability >= b_candidate.success_probability
+                better_util = b_other.utility >= b_candidate.utility
                 
                 strictly_better = (b_other.fidelity > b_candidate.fidelity or 
                                    b_other.bell_pair_cost < b_candidate.bell_pair_cost or 
-                                   b_other.latency < b_candidate.latency)
+                                   b_other.latency < b_candidate.latency or
+                                   b_other.success_probability > b_candidate.success_probability or
+                                   b_other.utility > b_candidate.utility)
                                    
-                if better_fid and better_cost and better_lat and strictly_better:
+                if better_fid and better_cost and better_lat and better_prob and better_util and strictly_better:
                     is_dominated = True
                     break
                     

@@ -1,5 +1,5 @@
 from itertools import combinations
-from pyqubo import Binary, Constraint, LogEncInteger, Placeholder
+from pyqubo import Binary, Constraint, LogEncInteger, Num, Placeholder
 
 class QUBOOptimizer:
     required_params = {
@@ -162,6 +162,8 @@ class QUBOOptimizer:
                 self.memory_capacities[node],
                 memory_penalty
             )
+        if isinstance(hamiltonian, (int, float)):
+            return Num(hamiltonian)
         return hamiltonian
     
     def decode_sample(self, sample):
