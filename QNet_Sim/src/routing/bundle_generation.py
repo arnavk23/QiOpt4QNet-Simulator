@@ -15,15 +15,24 @@ class Bundle:
     fidelity: float
     latency: float
     bell_pair_cost: int
-    request_id: str = ""
     bundle_id: str = ""
-    memory_demand: int = 0
-    edge_demand: int = 0
     purification_profile: Dict[Tuple[str, str], int] = field(default_factory=dict)
     edge_demands: Dict[Tuple[str, str], int] = field(default_factory=dict)
     memory_demands: Dict[str, int] = field(default_factory=dict)
     utility: float = 0.0
     success_probability: float = 0.0
+
+    @property
+    def request_id(self) -> str:
+        return self.request.request_id if self.request else ""
+
+    @property
+    def edge_demand(self) -> int:
+        return self.bell_pair_cost
+
+    @property
+    def memory_demand(self) -> int:
+        return sum(self.memory_demands.values()) if self.memory_demands else 0
 
     def to_dict(self) -> Dict:
         return {
@@ -55,8 +64,19 @@ class Bundle:
         }
 
 class BundleGenerator:
-    def __init__(self, network: QuantumNetwork):
+    def __init__(
+        self, 
+        network: QuantumNetwork, 
+        lambda_latency: float = 0.01, 
+        lambda_cost: float = 0.05,
+        alpha_prob: float = 1.0,
+        beta_fidelity: float = 1.0,
+    ):
         self.network = network
+        self.lambda_latency = lambda_latency
+        self.lambda_cost = lambda_cost
+        self.alpha_prob = alpha_prob
+        self.beta_fidelity = beta_fidelity
 
     def generate_bundles(self, request: Request, k_paths: List[List[str]]) -> List[Bundle]:
         bundles = []
@@ -64,11 +84,21 @@ class BundleGenerator:
             # We consider 0, 1, and 2 rounds of purification per link
             for q in [0, 1, 2]:
                 bundle = self._evaluate_bundle(request, path, q)
-                if bundle and bundle.fidelity >= request.minimum_fidelity:
+                if bundle:
+                    # Filter by thresholds (minimum fidelity, minimum success prob, max latency)
+                    if bundle.fidelity < getattr(request, 'minimum_fidelity', 0.0):
+                        continue
+                    if bundle.success_probability < getattr(request, 'minimum_success_probability', 0.0):
+                        continue
+                    if bundle.latency > getattr(request, 'maximum_latency', float('inf')):
+                        continue
+                    if bundle.bell_pair_cost > getattr(request, 'maximum_cost', float('inf')):
+                        continue
+                        
                     bundle.bundle_id = f"{request.request_id}_bundle_{len(bundles)}"
                     bundles.append(bundle)
         
-        return self.prune_dominated_bundles(bundles)
+        return bundles
 
     def _evaluate_bundle(self, request: Request, path: List[str], q: int) -> Optional[Bundle]:
         if len(path) < 2:
@@ -124,9 +154,6 @@ class BundleGenerator:
             fidelity=end_fidelity,
             latency=total_latency,
             bell_pair_cost=total_bell_pairs,
-            request_id=request.request_id,
-            memory_demand=sum(memory_demands.values()),
-            edge_demand=total_bell_pairs,
             purification_profile=purification_profile,
             edge_demands=edge_demands,
             memory_demands=memory_demands,
@@ -138,6 +165,10 @@ class BundleGenerator:
                 success_probability=success_probability,
                 latency=total_latency,
                 bell_pair_cost=total_bell_pairs,
+                lambda_latency=self.lambda_latency,
+                lambda_cost=self.lambda_cost,
+                alpha_prob=self.alpha_prob,
+                beta_fidelity=self.beta_fidelity,
             )
         )
 
@@ -156,20 +187,16 @@ class BundleGenerator:
                 if i == j:
                     continue
                     
-                # Check if b_other dominates b_candidate
+                # Check if b_other dominates b_candidate across core physical trade-offs
                 better_fid = b_other.fidelity >= b_candidate.fidelity
                 better_cost = b_other.bell_pair_cost <= b_candidate.bell_pair_cost
                 better_lat = b_other.latency <= b_candidate.latency
-                better_prob = b_other.success_probability >= b_candidate.success_probability
-                better_util = b_other.utility >= b_candidate.utility
                 
                 strictly_better = (b_other.fidelity > b_candidate.fidelity or 
                                    b_other.bell_pair_cost < b_candidate.bell_pair_cost or 
-                                   b_other.latency < b_candidate.latency or
-                                   b_other.success_probability > b_candidate.success_probability or
-                                   b_other.utility > b_candidate.utility)
+                                   b_other.latency < b_candidate.latency)
                                    
-                if better_fid and better_cost and better_lat and better_prob and better_util and strictly_better:
+                if better_fid and better_cost and better_lat and strictly_better:
                     is_dominated = True
                     break
                     

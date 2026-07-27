@@ -1,5 +1,5 @@
 from itertools import combinations
-from pyqubo import Binary, Constraint, LogEncInteger, Num, Placeholder
+from pyqubo import Binary, Constraint, LogEncInteger, Num, Placeholder  # type: ignore
 
 class QUBOOptimizer:
     required_params = {
