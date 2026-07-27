@@ -4,6 +4,8 @@ from models.quantum_state import QuantumState
 
 class QuantumNode:
     def __init__(self, node_id: str, memory_capacity: int, t1: float = float('inf'), t2: float = float('inf')):
+        if not isinstance(memory_capacity, int) or isinstance(memory_capacity, bool) or memory_capacity < 0:
+            raise ValueError("Memory capacity must be a nonnegative integer")
         self.id = node_id
         self.memory_capacity = memory_capacity
         self.t1 = t1
@@ -97,5 +99,4 @@ class QuantumNode:
 
     def __repr__(self):
         return f"QuantumNode(id={self.id}, capacity={self.memory_capacity}, available={self.available_memory()}, T1={self.t1}, T2={self.t2})"
-
 
