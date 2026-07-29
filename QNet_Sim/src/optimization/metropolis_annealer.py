@@ -47,12 +47,10 @@ class MetropolisAnnealer:
         total_utility = 0.0
         edge_load = defaultdict(int)
         mem_load = defaultdict(int)
-        active_count = 0
 
         for rid, bid in selections.items():
             if bid is None:
                 continue
-            active_count += 1
             key = (rid, bid)
             total_utility += self._util_of[key]
             for edge, d in self._edge_of[key].items():
@@ -61,10 +59,14 @@ class MetropolisAnnealer:
                 mem_load[node] += d
 
         energy = -total_utility
-        for rid, bundles in self.bundles_per_request.items():
-            active_in_request = sum(1 for r, b in selections.items() if r == rid and b is not None)
-            if active_in_request > 1:
-                energy += self._A * (active_in_request * (active_in_request - 1) // 2)
+        for rid in self.requests:
+            active = selections.get(rid)
+            siblings = 0
+            for other_rid, other_bid in selections.items():
+                if other_rid == rid and other_bid is not None:
+                    siblings += 1
+            if siblings > 1:
+                energy += self._A * (siblings * (siblings - 1) // 2)
         for edge, load in edge_load.items():
             cap = self.edge_capacities.get(edge, 0)
             if load > cap:
@@ -80,20 +82,17 @@ class MetropolisAnnealer:
         for b in self.bundles:
             total_demand = sum(b["edge_demands"].values()) + sum(b["memory_demands"].values())
             ud = b["utility"] / (total_demand + 1e-10)
-            scored.append((ud, b))
+            scored.append((ud, b["request_id"], b["bundle_id"], b))
         scored.sort(reverse=True)
-
         selections = {}
         assigned = set()
-
-        for _, b in scored:
+        for _, _, _, b in scored:
             rid = b["request_id"]
             if rid in assigned:
                 continue
             feasible = True
             for edge, d in b["edge_demands"].items():
-                edge = tuple(sorted(edge))
-                if d > self.edge_capacities.get(edge, 0):
+                if d > self.edge_capacities.get(tuple(sorted(edge)), 0):
                     feasible = False
                     break
             if feasible:
@@ -104,31 +103,28 @@ class MetropolisAnnealer:
             if feasible:
                 selections[rid] = b["bundle_id"]
                 assigned.add(rid)
-
         for rid in self.requests:
             if rid not in selections:
                 selections[rid] = None
-
         return selections
 
-    def solve(self, penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
-              max_iterations=5000, initial_temperature=10.0, cooling_rate=0.99,
-              steps_per_temperature=50, min_temperature=1e-3, patience=20):
-        self._A = penalty
-        self._B = edge_penalty
-        self._D = memory_penalty
+    def _random_seed(self):
+        selections = {}
+        for rid in self.requests:
+            bundles = self.bundles_per_request[rid]
+            pool = [b["bundle_id"] for b in bundles] + [None]
+            selections[rid] = self._rng.choice(pool)
+        return selections
 
-        current = self._greedy_seed()
+    def _metropolis_chain(self, initial, beta, steps, track_best=True):
+        """Run a Metropolis chain at fixed inverse temperature beta."""
+        current = dict(initial)
         current_energy = self._energy(current)
-        best = dict(current)
-        best_energy = current_energy
-        temperature = initial_temperature
-        stalled = 0
+        best = dict(current) if track_best else None
+        best_energy = current_energy if track_best else None
+        accepts = 0
 
-        for iteration in range(max_iterations):
-            if temperature < min_temperature:
-                break
-
+        for _ in range(steps):
             rid = self._rng.choice(self.requests)
             bundles = self.bundles_per_request[rid]
             old_bid = current[rid]
@@ -139,7 +135,6 @@ class MetropolisAnnealer:
 
             new_bid = self._rng.choice(pool)
             if new_bid == old_bid:
-                stalled += 1
                 continue
 
             candidate = dict(current)
@@ -147,29 +142,86 @@ class MetropolisAnnealer:
             candidate_energy = self._energy(candidate)
             delta = candidate_energy - current_energy
 
-            if delta < 0 or (temperature > 0 and self._rng.random() < math.exp(-delta / temperature)):
+            if delta < 0 or (beta > 0 and self._rng.random() < math.exp(-beta * delta)):
                 current = candidate
                 current_energy = candidate_energy
-                if current_energy < best_energy:
+                accepts += 1
+                if track_best and current_energy < best_energy:
                     best = dict(current)
                     best_energy = current_energy
+
+        rate = accepts / max(steps, 1)
+        return current, current_energy, best, best_energy, rate
+
+    def solve(self, penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+              max_iterations=5000, initial_temperature=10.0, cooling_rate=0.99,
+              steps_per_temperature=50, min_temperature=1e-3, patience=20,
+              n_restarts=1, target_accept_rate=0.25, initial_selections=None):
+        self._A = penalty
+        self._B = edge_penalty
+        self._D = memory_penalty
+
+        best_overall = None
+        best_energy_overall = float("inf")
+
+        for restart in range(n_restarts):
+            if restart == 0 and initial_selections is not None:
+                current = dict(initial_selections)
+            elif restart == 0:
+                current = self._greedy_seed()
+            else:
+                current = self._random_seed()
+
+            current_energy = self._energy(current)
+            best = dict(current)
+            best_energy = current_energy
+            temperature = initial_temperature
+            stalled = 0
+            window_size = max(10, steps_per_temperature)
+
+            for iteration in range(max_iterations):
+                if temperature < min_temperature:
+                    break
+
+                _, _, _, _, accept_rate = self._metropolis_chain(
+                    current, 1.0 / temperature, window_size, track_best=False
+                )
+
+                current_chain, current_energy, best_chain, best_chain_energy, _ = self._metropolis_chain(
+                    current, 1.0 / temperature, steps_per_temperature, track_best=True
+                )
+                current = current_chain
+                current_energy = current_energy
+
+                if best_chain is not None and best_chain_energy < best_energy:
+                    best = best_chain
+                    best_energy = best_chain_energy
                     stalled = 0
                 else:
                     stalled += 1
-            else:
-                stalled += 1
 
-            if stalled >= patience * steps_per_temperature:
-                temperature *= cooling_rate ** 2
-                stalled = 0
-            elif (iteration + 1) % steps_per_temperature == 0:
-                temperature *= cooling_rate
+                if accept_rate < 0.05:
+                    temperature = min(initial_temperature, temperature * 2.0)
+                elif accept_rate < target_accept_rate * 0.5:
+                    temperature *= 1.5
+                elif accept_rate > target_accept_rate * 2.0:
+                    temperature *= 0.85
+                else:
+                    temperature *= cooling_rate
 
-        selected = [(rid, bid) for rid, bid in best.items() if bid is not None]
+                if stalled >= patience:
+                    temperature = min(initial_temperature, temperature * 1.5)
+                    stalled = 0
+
+            if best_energy < best_energy_overall:
+                best_overall = dict(best)
+                best_energy_overall = best_energy
+
+        selected = [(rid, bid) for rid, bid in best_overall.items() if bid is not None]
         return {
             "selected": selected,
-            "energy": best_energy,
-            "selections": best,
+            "energy": best_energy_overall,
+            "selections": best_overall,
         }
 
     def decode_sample(self, result):

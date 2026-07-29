@@ -88,6 +88,30 @@ def generate_random(n: int, p: float, default_memory: Union[int, tuple] = 10, li
         
     return network
 
+def generate_waxman(n: int, alpha: float = 0.4, beta: float = 0.1,
+                    default_memory: Union[int, tuple] = 10,
+                    link_params: Optional[dict] = None) -> QuantumNetwork:
+    """Generate a Waxman random graph (geographic model).
+
+    Edge probability = alpha * exp(-d / (beta * L)), where d is the
+    Euclidean distance between nodes and L is the maximum distance.
+    This models geographically distributed QKD nodes more realistically
+    than Erdos-Renyi.
+    """
+    import networkx as nx
+    network = QuantumNetwork()
+    wx_graph = nx.waxman_graph(n, alpha=alpha, beta=beta)
+    node_mapping = {}
+    for i in range(n):
+        node_id = f"Node_{i}"
+        mem = _get_memory(default_memory)
+        network.add_node(QuantumNode(node_id, mem))
+        node_mapping[i] = node_id
+    for u, v in wx_graph.edges():
+        network.add_link(_generate_default_link(node_mapping[u], node_mapping[v], link_params))
+    return network
+
+
 def generate_heavy_hex(m: int, n: int, default_memory: Union[int, tuple] = 10, link_params: Optional[dict] = None) -> QuantumNetwork:
     import networkx as nx
     network = QuantumNetwork()

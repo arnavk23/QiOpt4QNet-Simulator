@@ -9,6 +9,7 @@ class TensorNetworkOptimizer:
         self.memory_capacities = memory_capacities
         self._validate()
         self._group_by_request()
+        self._precompute()
         self._order_requests()
 
     def _validate(self):
@@ -28,13 +29,26 @@ class TensorNetworkOptimizer:
                 self.requests.append(rid)
             self.bundles_per_request[rid].append(b)
 
-    def _undirected_edge(self, edge):
+    @staticmethod
+    def _undirected_edge(edge):
         return tuple(sorted(edge))
+
+    def _precompute(self):
+        self._util_of = {}
+        self._edge_of = {}
+        self._mem_of = {}
+        for b in self.bundles:
+            key = (b["request_id"], b["bundle_id"])
+            self._util_of[key] = b["utility"]
+            self._edge_of[key] = {self._undirected_edge(e): d for e, d in b["edge_demands"].items()}
+            self._mem_of[key] = dict(b["memory_demands"])
+
+    def _get_options(self, rid):
+        return [None] + [b["bundle_id"] for b in self.bundles_per_request[rid]]
 
     def _build_adjacency(self):
         rid_edges = {}
         rid_mems = {}
-        rid_to_idx = {rid: i for i, rid in enumerate(self.requests)}
         for b in self.bundles:
             rid = b["request_id"]
             if rid not in rid_edges:
@@ -50,10 +64,10 @@ class TensorNetworkOptimizer:
             for j, r2 in enumerate(self.requests):
                 if i >= j:
                     continue
-                shared_edges = rid_edges[r1] & rid_edges[r2]
-                shared_mems = rid_mems[r1] & rid_mems[r2]
-                if shared_edges or shared_mems:
-                    coupling[i, j] = coupling[j, i] = len(shared_edges) + len(shared_mems)
+                shared = rid_edges[r1] & rid_edges[r2]
+                shared |= rid_mems[r1] & rid_mems[r2]
+                if shared:
+                    coupling[i, j] = coupling[j, i] = len(shared)
         return coupling, rid_edges, rid_mems
 
     def _order_requests(self):
@@ -62,7 +76,6 @@ class TensorNetworkOptimizer:
         if n <= 2:
             self._ordered_requests = list(self.requests)
             return
-
         ordered = [self.requests[0]]
         remaining = set(range(1, n))
         current = 0
@@ -79,168 +92,187 @@ class TensorNetworkOptimizer:
                 remaining.remove(best_next)
             ordered.append(self.requests[best_next])
             current = best_next
-
         self._ordered_requests = ordered
 
-    def _build_tensors(self):
-        self._tensors = []
-        self._option_map = []
-        for rid in self._ordered_requests:
-            bundles = self.bundles_per_request[rid]
-            options = [None] + [b["bundle_id"] for b in bundles]
-            d = len(options)
-            self._option_map.append(options)
-            local_util = np.zeros(d)
-            for i, bid in enumerate(options):
-                if bid is not None:
-                    local_util[i] = self._get_utility(rid, bid)
+    def _local_penalty(self, rid, bid):
+        """Self-penalty: penalty incurred by this bundle alone exceeding capacity."""
+        if bid is None:
+            return 0.0
+        pen = 0.0
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            cap = self.edge_capacities.get(edge, 0)
+            if d > cap:
+                pen += self._B * (d - cap) ** 2
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            cap = self.memory_capacities.get(node, 0)
+            if d > cap:
+                pen += self._D * (d - cap) ** 2
+        return pen
 
-            self._tensors.append({"util": local_util, "options": options, "rid": rid})
+    def _pairwise_penalty(self, rid_l, bid_l, rid_r, bid_r):
+        """Pairwise penalty: penalty from two bundles together exceeding shared capacity."""
+        if bid_l is None or bid_r is None:
+            return 0.0
+        pen = 0.0
+        shared_edges = self._rid_edges[rid_l] & self._rid_edges[rid_r]
+        shared_mems = self._rid_mems[rid_l] & self._rid_mems[rid_r]
+        for edge in shared_edges:
+            dl = self._edge_of.get((rid_l, bid_l), {}).get(edge, 0)
+            dr = self._edge_of.get((rid_r, bid_r), {}).get(edge, 0)
+            if dl + dr > self.edge_capacities.get(edge, 0):
+                pen += self._B * (dl + dr - self.edge_capacities[edge]) ** 2
+        for node in shared_mems:
+            dl = self._mem_of.get((rid_l, bid_l), {}).get(node, 0)
+            dr = self._mem_of.get((rid_r, bid_r), {}).get(node, 0)
+            if dl + dr > self.memory_capacities.get(node, 0):
+                pen += self._D * (dl + dr - self.memory_capacities[node]) ** 2
+        return pen
 
-    def _get_utility(self, rid, bid):
-        for b in self.bundles:
-            if b["request_id"] == rid and b["bundle_id"] == bid:
-                return b["utility"]
-        return 0.0
+    def _global_penalty_estimate(self, rid, bid, other_selections):
+        """Penalty from this bundle given all other already-fixed selections."""
+        if bid is None:
+            return 0.0
+        pen = 0.0
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            total = d
+            for o_rid, o_bid in other_selections.items():
+                if o_bid is not None:
+                    total += self._edge_of.get((o_rid, o_bid), {}).get(edge, 0)
+            cap = self.edge_capacities.get(edge, 0)
+            if total > cap:
+                pen += self._B * (total - cap) ** 2
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            total = d
+            for o_rid, o_bid in other_selections.items():
+                if o_bid is not None:
+                    total += self._mem_of.get((o_rid, o_bid), {}).get(node, 0)
+            cap = self.memory_capacities.get(node, 0)
+            if total > cap:
+                pen += self._D * (total - cap) ** 2
+        return pen
 
-    def _get_edge_demands(self, rid, bid):
-        for b in self.bundles:
-            if b["request_id"] == rid and b["bundle_id"] == bid:
-                return {self._undirected_edge(e): d for e, d in b["edge_demands"].items()}
-        return {}
-
-    def _get_mem_demands(self, rid, bid):
-        for b in self.bundles:
-            if b["request_id"] == rid and b["bundle_id"] == bid:
-                return dict(b["memory_demands"])
-        return {}
-
-    def _contract_sweep(self, bond_dim, beta):
-        n = len(self._ordered_requests)
+    def solve(self, edge_penalty=10.0, memory_penalty=10.0,
+              bond_dim=8, beta=5.0, max_sweeps=15):
+        self._B = edge_penalty
+        self._D = memory_penalty
+        n = len(self.requests)
         if n == 0:
-            return {}
+            return {"selected": [], "selections": {}}
+
+        ordered = self._ordered_requests
+        opt_maps = [self._get_options(rid) for rid in ordered]
+        dims = [len(opts) for opts in opt_maps]
 
         mps = []
         for r_idx in range(n):
-            d = len(self._option_map[r_idx])
-            mps.append(np.ones((d, 1, 1), dtype=np.float64))
+            d = dims[r_idx]
+            rid = ordered[r_idx]
+            t = np.zeros((d, 1, 1), dtype=np.float64)
+            for b_idx, bid in enumerate(opt_maps[r_idx]):
+                e = -self._util_of.get((rid, bid), 0.0) if bid is not None else 0.0
+                e += self._local_penalty(rid, bid)
+                t[b_idx, 0, 0] = np.exp(-beta * e)
+            mps.append(t)
 
-        for _sweep in range(10):
+        best_selections = None
+        best_energy = float("inf")
+
+        for sweep in range(max_sweeps):
             for direction in ["left", "right"]:
                 if direction == "left":
                     for i in range(n - 1):
-                        self._contract_bond(mps, i, i + 1, bond_dim, beta)
+                        self._contract_bond(mps, i, i + 1, bond_dim, beta, ordered, opt_maps)
                 else:
                     for i in range(n - 2, -1, -1):
-                        self._contract_bond(mps, i, i + 1, bond_dim, beta)
+                        self._contract_bond(mps, i, i + 1, bond_dim, beta, ordered, opt_maps)
 
-        selections = {}
-        for r_idx in range(n):
-            t = mps[r_idx]
-            d = t.shape[0]
-            local_energies = np.zeros(d)
-            for b_idx in range(d):
-                energy = -self._tensors[r_idx]["util"][b_idx]
-                local_energies[b_idx] = energy
-
-            if r_idx > 0:
-                left_env = np.sum(t[:, :, :], axis=(1, 2))
+            selections = {}
+            used_assignments = {}
+            for r_idx in range(n):
+                rid = ordered[r_idx]
+                t = mps[r_idx]
+                d = dims[r_idx]
+                scores = np.zeros(d)
                 for b_idx in range(d):
-                    if np.isfinite(left_env[b_idx]):
-                        pass
+                    bid = opt_maps[r_idx][b_idx]
+                    e = -self._util_of.get((rid, bid), 0.0) if bid is not None else 0.0
+                    e += self._local_penalty(rid, bid)
+                    e += self._global_penalty_estimate(rid, bid, used_assignments)
+                    if opt_maps[r_idx][b_idx] is not None:
+                        scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
+                    else:
+                        scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
+                best_b = np.argmax(scores)
+                selections[rid] = opt_maps[r_idx][best_b]
+                if selections[rid] is not None:
+                    used_assignments[rid] = selections[rid]
 
-            tie_weights = -local_energies
-            sorted_idx = np.argsort(-tie_weights)
-            for b_idx in sorted_idx:
-                if b_idx == 0:
-                    selected_bid = None
-                else:
-                    selected_bid = self._option_map[r_idx][b_idx]
-                selections[self._ordered_requests[r_idx]] = selected_bid
-                break
+            act = {rid: bid for rid, bid in selections.items() if bid is not None}
+            util = sum(self._util_of.get((r, b), 0.0) for r, b in act.items())
+            edge_load = defaultdict(int)
+            mem_load = defaultdict(int)
+            for r, b in act.items():
+                for e, d in self._edge_of.get((r, b), {}).items():
+                    edge_load[e] += d
+                for n_, d in self._mem_of.get((r, b), {}).items():
+                    mem_load[n_] += d
+            pen = 0.0
+            for e, load in edge_load.items():
+                cap = self.edge_capacities.get(e, 0)
+                if load > cap:
+                    pen += self._B * (load - cap) ** 2
+            for n_, load in mem_load.items():
+                cap = self.memory_capacities.get(n_, 0)
+                if load > cap:
+                    pen += self._D * (load - cap) ** 2
+            energy = -util + pen
 
-        return selections
+            if energy < best_energy:
+                best_energy = energy
+                best_selections = dict(selections)
 
-    def _contract_bond(self, mps, left, right, bond_dim, beta):
+        selections = self._feasibility_repair(best_selections or selections)
+        selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
+        return {"selected": selected, "selections": selections, "energy": best_energy}
+
+    def _contract_bond(self, mps, left, right, bond_dim, beta, ordered, opt_maps):
         tl = mps[left]
         tr = mps[right]
         dl = tl.shape[0]
         dr = tr.shape[0]
         chi_l = tl.shape[1]
         chi_r = tr.shape[2]
+        rid_l = ordered[left]
+        rid_r = ordered[right]
 
         combined = np.einsum("abf,cfd->acbd", tl, tr)
         combined = combined.reshape(dl * chi_l, dr * chi_r)
 
-        penalty_matrix = self._compute_coupling_penalty(left, right)
+        for bl in range(dl):
+            bid_l = opt_maps[left][bl]
+            for br in range(dr):
+                bid_r = opt_maps[right][br]
+                pair_pen = self._pairwise_penalty(rid_l, bid_l, rid_r, bid_r)
+                if pair_pen > 0:
+                    factor = max(np.exp(-beta * pair_pen), 1e-150)
+                    combined[bl * chi_l:(bl + 1) * chi_l,
+                             br * chi_r:(br + 1) * chi_r] *= factor
 
-        if penalty_matrix is not None:
-            for bl in range(dl):
-                for br in range(dr):
-                    combined[bl * chi_l:(bl + 1) * chi_l, br * chi_r:(br + 1) * chi_r] *= np.exp(
-                        -beta * penalty_matrix[bl, br]
-                    )
+        combined = np.nan_to_num(combined, nan=0.0, posinf=1e150, neginf=-1e150)
 
-        u, s, vh = np.linalg.svd(combined, full_matrices=False)
+        try:
+            u, s, vh = np.linalg.svd(combined, full_matrices=False)
+        except np.linalg.LinAlgError:
+            u, s, vh = np.linalg.svd(combined + 1e-12 * np.eye(combined.shape[0], combined.shape[1]),
+                                     full_matrices=False)
         k = min(bond_dim, len(s))
         u = u[:, :k]
         s = s[:k]
         vh = vh[:k, :]
-
         tl_new = u.reshape(dl, chi_l, k)
         tr_new = vh.reshape(k, dr, chi_r).transpose(1, 0, 2)
         mps[left] = tl_new
         mps[right] = tr_new
-
-    def _compute_coupling_penalty(self, left_idx, right_idx):
-        rid_l = self._ordered_requests[left_idx]
-        rid_r = self._ordered_requests[right_idx]
-        options_l = self._option_map[left_idx]
-        options_r = self._option_map[right_idx]
-        dl = len(options_l)
-        dr = len(options_r)
-
-        matrix = np.zeros((dl, dr))
-
-        shared_edges = self._rid_edges[rid_l] & self._rid_edges[rid_r]
-        shared_mems = self._rid_mems[rid_l] & self._rid_mems[rid_r]
-
-        if not shared_edges and not shared_mems:
-            return None
-
-        for bl in range(dl):
-            bid_l = options_l[bl]
-            if bid_l is None:
-                edge_l = {}
-                mem_l = {}
-            else:
-                edge_l = self._get_edge_demands(rid_l, bid_l)
-                mem_l = self._get_mem_demands(rid_l, bid_l)
-
-            for br in range(dr):
-                bid_r = options_r[br]
-                if bid_r is None:
-                    edge_r = {}
-                    mem_r = {}
-                else:
-                    edge_r = self._get_edge_demands(rid_r, bid_r)
-                    mem_r = self._get_mem_demands(rid_r, bid_r)
-
-                penalty = 0.0
-                for edge in shared_edges:
-                    if edge in edge_l and edge in edge_r:
-                        cap = self.edge_capacities.get(edge, 0)
-                        if edge_l[edge] + edge_r[edge] > cap:
-                            penalty += self._B * (edge_l[edge] + edge_r[edge] - cap) ** 2
-                for node in shared_mems:
-                    if node in mem_l and node in mem_r:
-                        cap = self.memory_capacities.get(node, 0)
-                        if mem_l[node] + mem_r[node] > cap:
-                            penalty += self._D * (mem_l[node] + mem_r[node] - cap) ** 2
-
-                matrix[bl, br] = penalty
-
-        return matrix
 
     def _feasibility_repair(self, selections):
         def is_feasible(sel):
@@ -249,9 +281,9 @@ class TensorNetworkOptimizer:
             for rid, bid in sel.items():
                 if bid is None:
                     continue
-                for edge, d in self._get_edge_demands(rid, bid).items():
+                for edge, d in self._edge_of.get((rid, bid), {}).items():
                     edge_load[edge] += d
-                for node, d in self._get_mem_demands(rid, bid).items():
+                for node, d in self._mem_of.get((rid, bid), {}).items():
                     mem_load[node] += d
             for edge, load in edge_load.items():
                 if load > self.edge_capacities.get(edge, 0):
@@ -263,7 +295,6 @@ class TensorNetworkOptimizer:
 
         if is_feasible(selections):
             return selections
-
         for rid in self._ordered_requests:
             bundles = self.bundles_per_request[rid]
             for b in bundles:
@@ -271,26 +302,7 @@ class TensorNetworkOptimizer:
                 trial[rid] = b["bundle_id"]
                 if is_feasible(trial):
                     return trial
-
         return {rid: None for rid in self._ordered_requests}
-
-    def solve(self, edge_penalty=10.0, memory_penalty=10.0,
-              bond_dim=8, beta=5.0):
-        self._B = edge_penalty
-        self._D = memory_penalty
-        self._build_tensors()
-
-        if len(self._ordered_requests) == 0:
-            return {"selected": [], "selections": {}}
-
-        selections = self._contract_sweep(bond_dim, beta)
-        selections = self._feasibility_repair(selections)
-
-        selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
-        return {
-            "selected": selected,
-            "selections": selections,
-        }
 
     def decode_sample(self, result):
         return result["selected"]

@@ -1,0 +1,2831 @@
+[
+  {
+    "label": "chain_4_req_2",
+    "num_requests": 2,
+    "num_bundles": 6,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -122.2391955195526,
+        "time": 0.037466899999344605,
+        "served": 2,
+        "total_utility": 122.23919551955277,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -122.23919551955277,
+        "time": 0.019485700000586803,
+        "served": 2,
+        "total_utility": 122.23919551955277,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.01567059999979392,
+        "served": 2,
+        "total_utility": 122.23919551955277,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.509999987727497e-05,
+        "served": 2,
+        "total_utility": 122.23919551955277,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.6399999367422424e-05,
+        "served": 2,
+        "total_utility": 122.23919551955277,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_4_req_4",
+    "num_requests": 4,
+    "num_bundles": 12,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_1"
+          ]
+        ],
+        "energy": -126.86127984506129,
+        "time": 0.07540800000060699,
+        "served": 4,
+        "total_utility": 146.86127984506047,
+        "violations": 1
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -172.82733544274447,
+        "time": 0.0444800999994186,
+        "served": 4,
+        "total_utility": 172.82733544274447,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00913849999960803,
+        "served": 4,
+        "total_utility": 172.82733544274447,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 2.2799998987466097e-05,
+        "served": 4,
+        "total_utility": 172.82733544274447,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.1199999789823778e-05,
+        "served": 4,
+        "total_utility": 172.82733544274447,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_4_req_6",
+    "num_requests": 6,
+    "num_bundles": 18,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -135.02847101413772,
+        "time": 0.04832940000051167,
+        "served": 4,
+        "total_utility": 145.02847101414542,
+        "violations": 1
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -135.02847101414542,
+        "time": 0.03454050000073039,
+        "served": 4,
+        "total_utility": 145.02847101414542,
+        "violations": 1
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.026874199998928816,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.1800000215298496e-05,
+        "served": 6,
+        "total_utility": 191.39654945299057,
+        "violations": 3
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.7500000467407517e-05,
+        "served": 6,
+        "total_utility": 191.39654945299057,
+        "violations": 3
+      }
+    ]
+  },
+  {
+    "label": "chain_4_req_8",
+    "num_requests": 8,
+    "num_bundles": 23,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_1"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": -159.31538366594123,
+        "time": 0.0651782999993884,
+        "served": 3,
+        "total_utility": 159.3153836659348,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -205.99717302426544,
+        "time": 0.03896540000096138,
+        "served": 4,
+        "total_utility": 215.99717302426546,
+        "violations": 1
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.04877490000035323,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 8.060000072873663e-05,
+        "served": 8,
+        "total_utility": 273.32355687353106,
+        "violations": 5
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.809999907389283e-05,
+        "served": 8,
+        "total_utility": 273.32355687353106,
+        "violations": 5
+      }
+    ]
+  },
+  {
+    "label": "chain_6_req_2",
+    "num_requests": 2,
+    "num_bundles": 6,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -119.00406007501442,
+        "time": 0.032865200000742334,
+        "served": 2,
+        "total_utility": 119.00406007501401,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -119.00406007501401,
+        "time": 0.01909900000100606,
+        "served": 2,
+        "total_utility": 119.00406007501401,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.002730199999859906,
+        "served": 2,
+        "total_utility": 119.00406007501401,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.449999945180025e-05,
+        "served": 2,
+        "total_utility": 119.00406007501401,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 7.200000254670158e-06,
+        "served": 2,
+        "total_utility": 119.00406007501401,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_6_req_4",
+    "num_requests": 4,
+    "num_bundles": 11,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -3.5091807006829185,
+        "time": 0.055818499999077176,
+        "served": 2,
+        "total_utility": 13.509180700680673,
+        "violations": 1
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -35.74189802113655,
+        "time": 0.030208600001060404,
+        "served": 2,
+        "total_utility": 35.74189802113655,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.011844399999972666,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 4.340000123193022e-05,
+        "served": 4,
+        "total_utility": 48.85648565548142,
+        "violations": 4
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 2.5999999706982635e-05,
+        "served": 4,
+        "total_utility": 48.85648565548142,
+        "violations": 4
+      }
+    ]
+  },
+  {
+    "label": "chain_6_req_6",
+    "num_requests": 6,
+    "num_bundles": 14,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -65.39071782431347,
+        "time": 0.04764009999962582,
+        "served": 3,
+        "total_utility": 85.39071782431407,
+        "violations": 2
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -119.99788069315247,
+        "time": 0.035473300000376184,
+        "served": 3,
+        "total_utility": 119.99788069315247,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.015301000001272769,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 2.9899998480686918e-05,
+        "served": 6,
+        "total_utility": 131.17479561338413,
+        "violations": 6
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.7899999875226058e-05,
+        "served": 6,
+        "total_utility": 131.17479561338413,
+        "violations": 6
+      }
+    ]
+  },
+  {
+    "label": "chain_6_req_8",
+    "num_requests": 8,
+    "num_bundles": 22,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": -330.4890424833975,
+        "time": 0.06234070000027714,
+        "served": 7,
+        "total_utility": 330.4890424833932,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": -330.4890424833932,
+        "time": 0.0502375000014581,
+        "served": 7,
+        "total_utility": 330.4890424833932,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.027418100000431878,
+        "served": 7,
+        "total_utility": 330.4890424833932,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.3599999369471334e-05,
+        "served": 7,
+        "total_utility": 330.4890424833932,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.8700000509852543e-05,
+        "served": 7,
+        "total_utility": 330.4890424833932,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_8_req_2",
+    "num_requests": 2,
+    "num_bundles": 6,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -79.17222502901404,
+        "time": 0.04431550000117568,
+        "served": 2,
+        "total_utility": 79.1722250290128,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -79.1722250290128,
+        "time": 0.022025000000212458,
+        "served": 2,
+        "total_utility": 79.1722250290128,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0024123000002873596,
+        "served": 2,
+        "total_utility": 79.1722250290128,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.630000042496249e-05,
+        "served": 2,
+        "total_utility": 79.1722250290128,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 8.800001523923129e-06,
+        "served": 2,
+        "total_utility": 79.1722250290128,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_8_req_4",
+    "num_requests": 4,
+    "num_bundles": 7,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -30.886464164939753,
+        "time": 0.043786500000351225,
+        "served": 2,
+        "total_utility": 40.88646416494079,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -40.88646416494079,
+        "time": 0.02131539999936649,
+        "served": 2,
+        "total_utility": 40.88646416494079,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.004516799999692012,
+        "served": 2,
+        "total_utility": 40.88646416494079,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.869999869086314e-05,
+        "served": 2,
+        "total_utility": 40.88646416494079,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.0299998393747956e-05,
+        "served": 2,
+        "total_utility": 40.88646416494079,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "chain_8_req_6",
+    "num_requests": 6,
+    "num_bundles": 10,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_1"
+          ]
+        ],
+        "energy": 97.23223162349859,
+        "time": 0.05099379999956,
+        "served": 2,
+        "total_utility": 2.7677683765002237,
+        "violations": 4
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": -31.095722650976263,
+        "time": 0.031137199999648146,
+        "served": 2,
+        "total_utility": 31.095722650976263,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.010215799999059527,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 2.59000007645227e-05,
+        "served": 3,
+        "total_utility": 35.97943270069521,
+        "violations": 2
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.4400000509340316e-05,
+        "served": 3,
+        "total_utility": 35.97943270069521,
+        "violations": 2
+      }
+    ]
+  },
+  {
+    "label": "chain_8_req_8",
+    "num_requests": 8,
+    "num_bundles": 17,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_2"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_1"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ]
+        ],
+        "energy": -66.4209580899842,
+        "time": 0.06172119999973802,
+        "served": 5,
+        "total_utility": 156.4209580899917,
+        "violations": 3
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -172.97416356166366,
+        "time": 0.03644700000040757,
+        "served": 4,
+        "total_utility": 172.97416356166366,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.018667700000150944,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.0299999707494862e-05,
+        "served": 5,
+        "total_utility": 180.29234396935578,
+        "violations": 1
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.739999970595818e-05,
+        "served": 5,
+        "total_utility": 180.29234396935578,
+        "violations": 1
+      }
+    ]
+  },
+  {
+    "label": "grid_3x3_req_3",
+    "num_requests": 3,
+    "num_bundles": 11,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_1"
+          ]
+        ],
+        "energy": -12.485198650385428,
+        "time": 0.060347500000716536,
+        "served": 3,
+        "total_utility": 72.48519865038371,
+        "violations": 3
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -84.57519963833471,
+        "time": 0.034505799998441944,
+        "served": 2,
+        "total_utility": 84.57519963833471,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.013336800000615767,
+        "served": 2,
+        "total_utility": 84.57519963833471,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 5.609999971056823e-05,
+        "served": 2,
+        "total_utility": 84.57519963833471,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 3.0899998819222674e-05,
+        "served": 2,
+        "total_utility": 84.57519963833471,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "grid_3x3_req_6",
+    "num_requests": 6,
+    "num_bundles": 43,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_1"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_5"
+          ]
+        ],
+        "energy": -12.424235685199164,
+        "time": 0.3592607999999018,
+        "served": 4,
+        "total_utility": 92.42423568519708,
+        "violations": 4
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_6"
+          ]
+        ],
+        "energy": -232.43301716513028,
+        "time": 0.1674072999994678,
+        "served": 6,
+        "total_utility": 232.43301716513028,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_6"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.3424678999999742,
+        "served": 6,
+        "total_utility": 232.43301716513028,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_6"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0001534000002720859,
+        "served": 6,
+        "total_utility": 232.43301716513028,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_6"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 8.519999937561806e-05,
+        "served": 6,
+        "total_utility": 232.43301716513028,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "grid_3x3_req_10",
+    "num_requests": 10,
+    "num_bundles": 71,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_5"
+          ]
+        ],
+        "energy": -72.40013871932388,
+        "time": 0.5823090000012598,
+        "served": 4,
+        "total_utility": 102.40013871932243,
+        "violations": 3
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_3"
+          ]
+        ],
+        "energy": -252.13296223303053,
+        "time": 0.3159086000014213,
+        "served": 10,
+        "total_utility": 262.13296223303047,
+        "violations": 1
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 1.0478571000003285,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_6"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_3"
+          ]
+        ],
+        "energy": null,
+        "time": 0.000386199999411474,
+        "served": 10,
+        "total_utility": 269.5630529333139,
+        "violations": 2
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_6"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0002581999997346429,
+        "served": 10,
+        "total_utility": 269.5630529333139,
+        "violations": 2
+      }
+    ]
+  },
+  {
+    "label": "grid_3x4_req_3",
+    "num_requests": 3,
+    "num_bundles": 15,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": 33.791117157374174,
+        "time": 0.2537358999998105,
+        "served": 2,
+        "total_utility": 36.208882842626814,
+        "violations": 2
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": -87.7337336979036,
+        "time": 0.09301489999961632,
+        "served": 3,
+        "total_utility": 87.73373369790359,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0391302000007272,
+        "served": 3,
+        "total_utility": 87.73373369790359,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 8.960000013757963e-05,
+        "served": 3,
+        "total_utility": 87.73373369790359,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 4.940000144415535e-05,
+        "served": 3,
+        "total_utility": 87.73373369790359,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "grid_3x4_req_6",
+    "num_requests": 6,
+    "num_bundles": 43,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_1"
+          ]
+        ],
+        "energy": 23.686581425357872,
+        "time": 0.4949587999999494,
+        "served": 2,
+        "total_utility": 16.313418574700822,
+        "violations": 1
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_5"
+          ]
+        ],
+        "energy": -79.7341794388244,
+        "time": 0.15097880000030273,
+        "served": 5,
+        "total_utility": 79.7341794388244,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_5"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.47530969999934314,
+        "served": 5,
+        "total_utility": 79.7341794388244,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_5"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00014109999938227702,
+        "served": 5,
+        "total_utility": 84.15608672998142,
+        "violations": 1
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_5"
+          ]
+        ],
+        "energy": null,
+        "time": 7.159999950090423e-05,
+        "served": 5,
+        "total_utility": 84.15608672998142,
+        "violations": 1
+      }
+    ]
+  },
+  {
+    "label": "grid_3x4_req_10",
+    "num_requests": 10,
+    "num_bundles": 60,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_4"
+          ]
+        ],
+        "energy": -128.6642177684189,
+        "time": 0.5576268000004347,
+        "served": 4,
+        "total_utility": 138.66421776830154,
+        "violations": 1
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ]
+        ],
+        "energy": -248.76484430363033,
+        "time": 0.2042074999990291,
+        "served": 6,
+        "total_utility": 248.76484430363033,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [],
+        "energy": null,
+        "time": 0.5780940000004193,
+        "served": 0,
+        "total_utility": 0.0,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0002272000001539709,
+        "served": 9,
+        "total_utility": 270.297109740689,
+        "violations": 5
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0001494999996793922,
+        "served": 9,
+        "total_utility": 270.297109740689,
+        "violations": 5
+      }
+    ]
+  },
+  {
+    "label": "grid_4x4_req_3",
+    "num_requests": 3,
+    "num_bundles": 21,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_4"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_4"
+          ]
+        ],
+        "energy": 242.6239699053549,
+        "time": 0.40084029999889026,
+        "served": 2,
+        "total_utility": -2.623969905361678,
+        "violations": 5
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": -70.07237815814005,
+        "time": 0.12419649999901594,
+        "served": 3,
+        "total_utility": 70.07237815814005,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.05930590000025404,
+        "served": 3,
+        "total_utility": 70.07237815814005,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00012900000001536682,
+        "served": 3,
+        "total_utility": 70.07237815814005,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_2"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 6.630000098084565e-05,
+        "served": 3,
+        "total_utility": 70.07237815814005,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "grid_4x4_req_6",
+    "num_requests": 6,
+    "num_bundles": 41,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_8"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_2"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_7"
+          ]
+        ],
+        "energy": 94.11385229241569,
+        "time": 0.5122998000006191,
+        "served": 3,
+        "total_utility": 25.886147707559907,
+        "violations": 3
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_6"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -213.32700811238598,
+        "time": 0.15520160000050964,
+        "served": 5,
+        "total_utility": 213.32700811238595,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_6"
+          ]
+        ],
+        "energy": null,
+        "time": 0.24211060000016005,
+        "served": 5,
+        "total_utility": 213.32700811238595,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_6"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0001723000004858477,
+        "served": 5,
+        "total_utility": 213.32700811238595,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_6"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 9.689999933470972e-05,
+        "served": 5,
+        "total_utility": 213.32700811238595,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "grid_4x4_req_10",
+    "num_requests": 10,
+    "num_bundles": 76,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_1",
+            "Req_1_bundle_5"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_4"
+          ]
+        ],
+        "energy": -56.73576195273199,
+        "time": 0.7219666999990295,
+        "served": 4,
+        "total_utility": 116.73576195284734,
+        "violations": 3
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ]
+        ],
+        "energy": -329.6440115965314,
+        "time": 0.25918170000113605,
+        "served": 8,
+        "total_utility": 329.6440115965314,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_1"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 1.1087642999991658,
+        "served": 9,
+        "total_utility": 291.57152257628536,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_1"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0003040999999939231,
+        "served": 9,
+        "total_utility": 334.1940412087512,
+        "violations": 1
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_1"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00015859999984968454,
+        "served": 9,
+        "total_utility": 334.1940412087512,
+        "violations": 1
+      }
+    ]
+  }
+]
