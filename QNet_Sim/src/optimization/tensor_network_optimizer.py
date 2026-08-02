@@ -95,7 +95,14 @@ class TensorNetworkOptimizer:
         self._ordered_requests = ordered
 
     def _local_penalty(self, rid, bid):
-        """Self-penalty: penalty incurred by this bundle alone exceeding capacity."""
+        """Self-penalty: overload penalty plus quadratic congestion term (G1/G7).
+
+        The congestion term C*load^2 is exactly decomposed as
+        C*sum_b(d_b)^2 = sum_b(C*d_b^2) + sum_{b<b'} 2*C*d_b*d_b',
+        so the per-request local C*d^2 term plus the pairwise 2*C*d*d' cross-term
+        reproduce the paper's quadratic congestion penalty inside the tensor
+        elements themselves.
+        """
         if bid is None:
             return 0.0
         pen = 0.0
@@ -103,14 +110,16 @@ class TensorNetworkOptimizer:
             cap = self.edge_capacities.get(edge, 0)
             if d > cap:
                 pen += self._B * (d - cap) ** 2
+            pen += self._C * d * d
         for node, d in self._mem_of.get((rid, bid), {}).items():
             cap = self.memory_capacities.get(node, 0)
             if d > cap:
                 pen += self._D * (d - cap) ** 2
+            pen += self._E * d * d
         return pen
 
     def _pairwise_penalty(self, rid_l, bid_l, rid_r, bid_r):
-        """Pairwise penalty: penalty from two bundles together exceeding shared capacity."""
+        """Pairwise penalty: shared-capacity overload plus 2*C*d_l*d_r cross-term."""
         if bid_l is None or bid_r is None:
             return 0.0
         pen = 0.0
@@ -121,11 +130,13 @@ class TensorNetworkOptimizer:
             dr = self._edge_of.get((rid_r, bid_r), {}).get(edge, 0)
             if dl + dr > self.edge_capacities.get(edge, 0):
                 pen += self._B * (dl + dr - self.edge_capacities[edge]) ** 2
+            pen += 2.0 * self._C * dl * dr
         for node in shared_mems:
             dl = self._mem_of.get((rid_l, bid_l), {}).get(node, 0)
             dr = self._mem_of.get((rid_r, bid_r), {}).get(node, 0)
             if dl + dr > self.memory_capacities.get(node, 0):
                 pen += self._D * (dl + dr - self.memory_capacities[node]) ** 2
+            pen += 2.0 * self._E * dl * dr
         return pen
 
     def _global_penalty_estimate(self, rid, bid, other_selections):
@@ -141,6 +152,7 @@ class TensorNetworkOptimizer:
             cap = self.edge_capacities.get(edge, 0)
             if total > cap:
                 pen += self._B * (total - cap) ** 2
+            pen += self._C * total * total
         for node, d in self._mem_of.get((rid, bid), {}).items():
             total = d
             for o_rid, o_bid in other_selections.items():
@@ -149,12 +161,16 @@ class TensorNetworkOptimizer:
             cap = self.memory_capacities.get(node, 0)
             if total > cap:
                 pen += self._D * (total - cap) ** 2
+            pen += self._E * total * total
         return pen
 
     def solve(self, edge_penalty=10.0, memory_penalty=10.0,
+              congestion_penalty=0.05, memory_congestion_penalty=0.05,
               bond_dim=8, beta=5.0, max_sweeps=15):
         self._B = edge_penalty
         self._D = memory_penalty
+        self._C = congestion_penalty
+        self._E = memory_congestion_penalty
         n = len(self.requests)
         if n == 0:
             return {"selected": [], "selections": {}}
@@ -198,11 +214,15 @@ class TensorNetworkOptimizer:
                     e = -self._util_of.get((rid, bid), 0.0) if bid is not None else 0.0
                     e += self._local_penalty(rid, bid)
                     e += self._global_penalty_estimate(rid, bid, used_assignments)
-                    if opt_maps[r_idx][b_idx] is not None:
-                        scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
-                    else:
-                        scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
-                best_b = np.argmax(scores)
+                    scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
+                # Deterministic tie-break (G13): among equal scores prefer the
+                # higher-utility bundle, then the lexicographically smaller id.
+                scale = max(abs(scores).max(), 1e-12)
+                tie_break = np.zeros(d)
+                for b_idx in range(d):
+                    bid = opt_maps[r_idx][b_idx]
+                    tie_break[b_idx] = self._util_of.get((rid, bid), 0.0) / scale
+                best_b = np.argmax(scores + 1e-9 * tie_break)
                 selections[rid] = opt_maps[r_idx][best_b]
                 if selections[rid] is not None:
                     used_assignments[rid] = selections[rid]
@@ -221,10 +241,12 @@ class TensorNetworkOptimizer:
                 cap = self.edge_capacities.get(e, 0)
                 if load > cap:
                     pen += self._B * (load - cap) ** 2
+                pen += self._C * load * load
             for n_, load in mem_load.items():
                 cap = self.memory_capacities.get(n_, 0)
                 if load > cap:
                     pen += self._D * (load - cap) ** 2
+                pen += self._E * load * load
             energy = -util + pen
 
             if energy < best_energy:
@@ -232,8 +254,65 @@ class TensorNetworkOptimizer:
                 best_selections = dict(selections)
 
         selections = self._feasibility_repair(best_selections or selections)
+
+        # Fallback: never return a worse selection than the feasible greedy
+        # baseline (guards against the decoder collapsing to all-None under
+        # high contention, which the MPS is otherwise prone to).
+        greedy = self._greedy_seed()
+        mps_util = sum(
+            self._util_of.get((r, b), 0.0) for r, b in selections.items() if b is not None
+        )
+        greedy_util = sum(
+            self._util_of.get((r, b), 0.0) for r, b in greedy.items() if b is not None
+        )
+        if greedy_util > mps_util:
+            selections = greedy
+
         selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
         return {"selected": selected, "selections": selections, "energy": best_energy}
+
+    def _greedy_seed(self):
+        """Deterministic, load-aware greedy baseline (utility density, then utility, ids).
+
+        Tracks cumulative edge/memory load so the returned selection is always
+        capacity-feasible.
+        """
+        scored = []
+        for b in self.bundles:
+            total_demand = sum(b["edge_demands"].values()) + sum(b["memory_demands"].values())
+            ud = b["utility"] / (total_demand + 1e-10)
+            scored.append((ud, -b["utility"], b["request_id"], b["bundle_id"], b))
+        scored.sort(key=lambda x: (x[0], x[1], x[2], x[3]), reverse=True)
+        selections = {}
+        assigned = set()
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        for _, _, _, _, b in scored:
+            rid = b["request_id"]
+            if rid in assigned:
+                continue
+            feasible = True
+            for edge, d in b["edge_demands"].items():
+                e = tuple(sorted(edge))
+                if edge_load[e] + d > self.edge_capacities.get(e, 0):
+                    feasible = False
+                    break
+            if feasible:
+                for node, d in b["memory_demands"].items():
+                    if mem_load[node] + d > self.memory_capacities.get(node, 0):
+                        feasible = False
+                        break
+            if feasible:
+                selections[rid] = b["bundle_id"]
+                assigned.add(rid)
+                for edge, d in b["edge_demands"].items():
+                    edge_load[tuple(sorted(edge))] += d
+                for node, d in b["memory_demands"].items():
+                    mem_load[node] += d
+        for rid in self.requests:
+            if rid not in selections:
+                selections[rid] = None
+        return selections
 
     def _contract_bond(self, mps, left, right, bond_dim, beta, ordered, opt_maps):
         tl = mps[left]

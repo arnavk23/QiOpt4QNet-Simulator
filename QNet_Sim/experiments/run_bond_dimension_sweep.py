@@ -1,7 +1,7 @@
 """
 Q2: How does bond dimension χ affect Tensor Network MPS accuracy and cost?
 
-Tests χ ∈ {1, 2, 4, 8, 16} on a fixed grid topology with varying request counts.
+Tests χ ∈ {1, 2, 4, 8, 16, 32} on a fixed grid topology with varying request counts.
 """
 import sys, os, time, json, random
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
@@ -72,7 +72,7 @@ def main():
     print("  Q2: Bond Dimension χ Sweep for Tensor Network MPS")
     print("=" * 70)
 
-    bond_dims = [1, 2, 4, 8, 16]
+    bond_dims = [1, 2, 4, 8, 16, 32]
     net = generate_grid(3, 4, default_memory=(5, 15),
                         link_params={"capacity_bounds": (2, 6), "fidelity_bounds": (0.8, 0.95)})
     ec, mc = extract_capacities(net)

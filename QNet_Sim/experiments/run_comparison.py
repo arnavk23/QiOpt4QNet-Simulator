@@ -26,6 +26,7 @@ from optimization.qubo_optimizer import QUBOOptimizer
 from optimization.openjij_solver import solve_sa
 from optimization.metropolis_annealer import MetropolisAnnealer
 from optimization.tensor_network_optimizer import TensorNetworkOptimizer
+from optimization.sequential_branch_optimizer import SequentialBranchOptimizer
 from optimization.baselines import (
     shortest_feasible_path,
     utility_density_greedy,
@@ -80,6 +81,8 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             max_iterations=kwargs.get("max_iterations", 3000),
             initial_temperature=kwargs.get("initial_temperature", 10.0),
             cooling_rate=kwargs.get("cooling_rate", 0.97),
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": result["selected"], "energy": result["energy"], "time": elapsed}
@@ -91,9 +94,24 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             beta=kwargs.get("beta", 5.0),
             edge_penalty=10.0,
             memory_penalty=10.0,
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": result["selected"], "energy": None, "time": elapsed}
+
+    elif method == "sequential_branch":
+        opt = SequentialBranchOptimizer(bundles, edge_caps, mem_caps)
+        result = opt.solve(
+            branch_factor=kwargs.get("branch_factor", 8),
+            beta=kwargs.get("beta", 5.0),
+            edge_penalty=10.0,
+            memory_penalty=10.0,
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
+        )
+        elapsed = time.perf_counter() - start
+        return {"name": name, "selected": result["selected"], "energy": result["energy"], "time": elapsed}
 
     elif method == "utility_density_greedy":
         result = utility_density_greedy(bundles, edge_caps, mem_caps)
@@ -164,6 +182,7 @@ def run_experiment(net, requests, edge_caps, mem_caps, label=""):
     solvers = [
         ("QUBO+SA (OpenJij)", "qubo_sa"),
         ("Metropolis Annealer", "metropolis"),
+        ("Sequential Branch Expansion", "sequential_branch"),
         ("Tensor Network MPS", "tensor_network"),
         ("Utility-Density Greedy", "utility_density_greedy"),
         ("Fidelity-Aware Greedy", "fidelity_aware_greedy"),

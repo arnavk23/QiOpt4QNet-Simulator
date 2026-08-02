@@ -17,6 +17,7 @@ from routing.path_generator import PathGenerator
 from routing.bundle_generation import BundleGenerator
 from optimization.metropolis_annealer import MetropolisAnnealer
 from optimization.tensor_network_optimizer import TensorNetworkOptimizer
+from optimization.sequential_branch_optimizer import SequentialBranchOptimizer
 
 
 def _undirected_edge(e):
@@ -132,6 +133,7 @@ def main():
     for solver_name, opt_cls, kwargs in [
         ("Metropolis", MetropolisAnnealer, {"max_iterations": 2000}),
         ("TensorNetwork", TensorNetworkOptimizer, {"bond_dim": 6, "beta": 5.0}),
+        ("BranchExpansion", SequentialBranchOptimizer, {"branch_factor": 8, "beta": 5.0}),
     ]:
         if solver_name == "Metropolis":
             opt = opt_cls(all_bundles, ec, mc, seed=42)
@@ -152,6 +154,7 @@ def main():
     for solver_name, opt_cls, kwargs in [
         ("Metropolis", MetropolisAnnealer, {"max_iterations": 2000}),
         ("TensorNetwork", TensorNetworkOptimizer, {"bond_dim": 6, "beta": 5.0}),
+        ("BranchExpansion", SequentialBranchOptimizer, {"branch_factor": 8, "beta": 5.0}),
     ]:
         if solver_name == "Metropolis":
             opt = opt_cls(all_bundles, ec, mc, seed=42)
