@@ -1,0 +1,1198 @@
+[
+  {
+    "label": "waxman_20_req_10",
+    "n_nodes": 20,
+    "n_requests": 10,
+    "n_bundles": 83,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_6",
+            "Req_6_bundle_6"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_1"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_4"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_5"
+          ]
+        ],
+        "energy": -80.85220816296845,
+        "time": 0.15823449999879813,
+        "served": 5,
+        "total_utility": 97.65220816296845,
+        "violations": 0
+      },
+      {
+        "name": "QUBO+SQA (OpenJij)",
+        "selected": [
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_8",
+            "Req_8_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": -354.02785865810006,
+        "time": 0.3844494000004488,
+        "served": 10,
+        "total_utility": 367.3778586581001,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": -379.03196905547924,
+        "time": 16.897585400001844,
+        "served": 10,
+        "total_utility": 391.2319690554793,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": -379.0319690554793,
+        "time": 1.0020627999983844,
+        "served": 10,
+        "total_utility": 391.2319690554793,
+        "violations": 0
+      },
+      {
+        "name": "TN+Metro Pipeline",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": -379.03196905547924,
+        "time": 1.8476816000002145,
+        "served": 10,
+        "total_utility": 391.2319690554793,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0001953999999386724,
+        "served": 10,
+        "total_utility": 391.2319690554793,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_8",
+            "Req_8_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_3"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_0"
+          ],
+          [
+            "Req_4",
+            "Req_4_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_3"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00010290000136592425,
+        "served": 10,
+        "total_utility": 391.2319690554793,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "waxman_30_req_15",
+    "n_nodes": 30,
+    "n_requests": 15,
+    "n_bundles": 26,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_1"
+          ]
+        ],
+        "energy": -58.95890253145304,
+        "time": 0.08521569999720668,
+        "served": 2,
+        "total_utility": 59.70890253145304,
+        "violations": 0
+      },
+      {
+        "name": "QUBO+SQA (OpenJij)",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_6"
+          ]
+        ],
+        "energy": -61.84859644698478,
+        "time": 0.20373819999804255,
+        "served": 4,
+        "total_utility": 71.14859644698478,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": -96.25365968818996,
+        "time": 13.060275499999989,
+        "served": 4,
+        "total_utility": 101.00365968818994,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": -96.25365968818994,
+        "time": 0.04885949999879813,
+        "served": 4,
+        "total_utility": 101.00365968818994,
+        "violations": 0
+      },
+      {
+        "name": "TN+Metro Pipeline",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": -96.25365968818996,
+        "time": 0.800646499999857,
+        "served": 4,
+        "total_utility": 101.00365968818994,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00010739999925135635,
+        "served": 4,
+        "total_utility": 101.00365968818994,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 6.270000085351057e-05,
+        "served": 4,
+        "total_utility": 101.00365968818994,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "waxman_40_req_20",
+    "n_nodes": 40,
+    "n_requests": 20,
+    "n_bundles": 128,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_6"
+          ]
+        ],
+        "energy": -162.50234150373012,
+        "time": 0.29046719999678317,
+        "served": 3,
+        "total_utility": 163.75234150373012,
+        "violations": 0
+      },
+      {
+        "name": "QUBO+SQA (OpenJij)",
+        "selected": [
+          [
+            "Req_10",
+            "Req_10_bundle_3"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_6"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_3"
+          ],
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_6"
+          ]
+        ],
+        "energy": -373.67194852615836,
+        "time": 0.7445140999989235,
+        "served": 12,
+        "total_utility": 394.22194852615837,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_10",
+            "Req_10_bundle_3"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ]
+        ],
+        "energy": -453.84492976423013,
+        "time": 17.563173700000334,
+        "served": 12,
+        "total_utility": 465.29492976423035,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_10",
+            "Req_10_bundle_0"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ]
+        ],
+        "energy": -427.4358478584343,
+        "time": 1.3174227000017709,
+        "served": 12,
+        "total_utility": 441.33584785843436,
+        "violations": 0
+      },
+      {
+        "name": "TN+Metro Pipeline",
+        "selected": [
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_10",
+            "Req_10_bundle_3"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ]
+        ],
+        "energy": -453.8449297642301,
+        "time": 2.2752499999987776,
+        "served": 12,
+        "total_utility": 465.29492976423035,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_10",
+            "Req_10_bundle_0"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_2"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00024149999808287248,
+        "served": 12,
+        "total_utility": 441.33584785843436,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_10",
+            "Req_10_bundle_3"
+          ],
+          [
+            "Req_12",
+            "Req_12_bundle_3"
+          ],
+          [
+            "Req_19",
+            "Req_19_bundle_0"
+          ],
+          [
+            "Req_16",
+            "Req_16_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_15",
+            "Req_15_bundle_0"
+          ],
+          [
+            "Req_9",
+            "Req_9_bundle_0"
+          ],
+          [
+            "Req_1",
+            "Req_1_bundle_3"
+          ],
+          [
+            "Req_5",
+            "Req_5_bundle_0"
+          ],
+          [
+            "Req_0",
+            "Req_0_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ],
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_14",
+            "Req_14_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.0001548000000184402,
+        "served": 14,
+        "total_utility": 470.08888516573813,
+        "violations": 0
+      }
+    ]
+  },
+  {
+    "label": "waxman_50_req_30",
+    "n_nodes": 50,
+    "n_requests": 30,
+    "n_bundles": 84,
+    "results": [
+      {
+        "name": "QUBO+SA (OpenJij)",
+        "selected": [
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_1"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_1"
+          ]
+        ],
+        "energy": -41.85939977375678,
+        "time": 0.28847809999933816,
+        "served": 3,
+        "total_utility": 47.70939977375678,
+        "violations": 0
+      },
+      {
+        "name": "QUBO+SQA (OpenJij)",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_27",
+            "Req_27_bundle_0"
+          ],
+          [
+            "Req_13",
+            "Req_13_bundle_0"
+          ],
+          [
+            "Req_22",
+            "Req_22_bundle_0"
+          ]
+        ],
+        "energy": -143.09814586957543,
+        "time": 0.6187420999995084,
+        "served": 8,
+        "total_utility": 157.99814586957544,
+        "violations": 0
+      },
+      {
+        "name": "Metropolis Annealer",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_27",
+            "Req_27_bundle_0"
+          ]
+        ],
+        "energy": -175.80955809743557,
+        "time": 17.5823335999994,
+        "served": 9,
+        "total_utility": 192.3595580974356,
+        "violations": 0
+      },
+      {
+        "name": "Tensor Network MPS",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_22",
+            "Req_22_bundle_0"
+          ]
+        ],
+        "energy": -158.49359480317335,
+        "time": 0.5400417000018933,
+        "served": 8,
+        "total_utility": 171.79359480317336,
+        "violations": 0
+      },
+      {
+        "name": "TN+Metro Pipeline",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_6",
+            "Req_6_bundle_0"
+          ],
+          [
+            "Req_27",
+            "Req_27_bundle_0"
+          ]
+        ],
+        "energy": -175.80955809743557,
+        "time": 1.661146700000245,
+        "served": 9,
+        "total_utility": 192.3595580974356,
+        "violations": 0
+      },
+      {
+        "name": "Utility-Density Greedy",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_22",
+            "Req_22_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00024389999816776253,
+        "served": 8,
+        "total_utility": 171.79359480317336,
+        "violations": 0
+      },
+      {
+        "name": "Fidelity-Aware Greedy",
+        "selected": [
+          [
+            "Req_17",
+            "Req_17_bundle_0"
+          ],
+          [
+            "Req_3",
+            "Req_3_bundle_0"
+          ],
+          [
+            "Req_7",
+            "Req_7_bundle_3"
+          ],
+          [
+            "Req_29",
+            "Req_29_bundle_0"
+          ],
+          [
+            "Req_24",
+            "Req_24_bundle_0"
+          ],
+          [
+            "Req_18",
+            "Req_18_bundle_0"
+          ],
+          [
+            "Req_2",
+            "Req_2_bundle_0"
+          ],
+          [
+            "Req_22",
+            "Req_22_bundle_0"
+          ]
+        ],
+        "energy": null,
+        "time": 0.00014419999934034422,
+        "served": 8,
+        "total_utility": 171.79359480317336,
+        "violations": 0
+      }
+    ]
+  }
+]

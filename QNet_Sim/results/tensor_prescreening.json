@@ -1,0 +1,170 @@
+[
+  {
+    "label": "chain_6_req_3",
+    "num_requests": 3,
+    "total_bundles": 9,
+    "filtered_bundles": 3,
+    "reduction_pct": 66.66666666666667,
+    "metro_only": {
+      "utility": 72.59309091136303,
+      "served": 3,
+      "violations": 0,
+      "time": 0.02499530000022787
+    },
+    "tn_metro": {
+      "utility": 72.59309091136303,
+      "served": 3,
+      "violations": 0,
+      "time": 0.02833910000117612,
+      "tn_time": 0.005244699999821023,
+      "metro_time": 0.023094400001355098
+    }
+  },
+  {
+    "label": "chain_6_req_5",
+    "num_requests": 5,
+    "total_bundles": 13,
+    "filtered_bundles": 5,
+    "reduction_pct": 61.53846153846154,
+    "metro_only": {
+      "utility": 166.53504942049852,
+      "served": 4,
+      "violations": 0,
+      "time": 0.04146450000007462
+    },
+    "tn_metro": {
+      "utility": 166.53504942049852,
+      "served": 4,
+      "violations": 0,
+      "time": 0.0399582999998529,
+      "tn_time": 0.011449499999798718,
+      "metro_time": 0.02850880000005418
+    }
+  },
+  {
+    "label": "chain_6_req_8",
+    "num_requests": 8,
+    "total_bundles": 21,
+    "filtered_bundles": 21,
+    "reduction_pct": 0.0,
+    "metro_only": {
+      "utility": 293.05326771305334,
+      "served": 6,
+      "violations": 2,
+      "time": 0.054807099999379716
+    },
+    "tn_metro": {
+      "utility": 293.05326771305334,
+      "served": 6,
+      "violations": 2,
+      "time": 0.08545869999943534,
+      "tn_time": 0.035954599999968195,
+      "metro_time": 0.049504099999467144
+    }
+  },
+  {
+    "label": "grid_3x4_req_3",
+    "num_requests": 3,
+    "total_bundles": 23,
+    "filtered_bundles": 3,
+    "reduction_pct": 86.95652173913044,
+    "metro_only": {
+      "utility": 71.82902217368397,
+      "served": 3,
+      "violations": 0,
+      "time": 0.03811719999976049
+    },
+    "tn_metro": {
+      "utility": 71.82902217368397,
+      "served": 3,
+      "violations": 0,
+      "time": 0.06369569999878877,
+      "tn_time": 0.04370799999924202,
+      "metro_time": 0.01998769999954675
+    }
+  },
+  {
+    "label": "grid_3x4_req_5",
+    "num_requests": 5,
+    "total_bundles": 41,
+    "filtered_bundles": 7,
+    "reduction_pct": 82.92682926829268,
+    "metro_only": {
+      "utility": 330.0333503799425,
+      "served": 5,
+      "violations": 0,
+      "time": 0.04607359999863547
+    },
+    "tn_metro": {
+      "utility": 330.0333503799425,
+      "served": 5,
+      "violations": 0,
+      "time": 0.19166469999981928,
+      "tn_time": 0.13362400000005437,
+      "metro_time": 0.05804069999976491
+    }
+  },
+  {
+    "label": "grid_3x4_req_8",
+    "num_requests": 8,
+    "total_bundles": 59,
+    "filtered_bundles": 59,
+    "reduction_pct": 0.0,
+    "metro_only": {
+      "utility": 243.38591532266219,
+      "served": 5,
+      "violations": 0,
+      "time": 0.10895780000100785
+    },
+    "tn_metro": {
+      "utility": 243.38591532266219,
+      "served": 5,
+      "violations": 0,
+      "time": 0.2945008000006055,
+      "tn_time": 0.23755010000058974,
+      "metro_time": 0.056950700000015786
+    }
+  },
+  {
+    "label": "grid_4x4_req_5",
+    "num_requests": 5,
+    "total_bundles": 40,
+    "filtered_bundles": 7,
+    "reduction_pct": 82.5,
+    "metro_only": {
+      "utility": 191.8253759189236,
+      "served": 5,
+      "violations": 0,
+      "time": 0.0461658999993233
+    },
+    "tn_metro": {
+      "utility": 191.8253759189236,
+      "served": 5,
+      "violations": 0,
+      "time": 0.14047349999964354,
+      "tn_time": 0.10419379999984812,
+      "metro_time": 0.03627969999979541
+    }
+  },
+  {
+    "label": "grid_4x4_req_10",
+    "num_requests": 10,
+    "total_bundles": 54,
+    "filtered_bundles": 10,
+    "reduction_pct": 81.4814814814815,
+    "metro_only": {
+      "utility": 212.16531009251338,
+      "served": 8,
+      "violations": 0,
+      "time": 0.06601659999978438
+    },
+    "tn_metro": {
+      "utility": 211.33489667570257,
+      "served": 9,
+      "violations": 0,
+      "time": 0.18396459999894432,
+      "tn_time": 0.11484729999938281,
+      "metro_time": 0.06911729999956151
+    }
+  }
+]
