@@ -237,6 +237,63 @@ class MetropolisAnnealer:
         rate = accepts / max(steps, 1)
         return current, current_energy, best, best_energy, rate
 
+    def _feasibility_repair(self, selections):
+        """Deterministic greedy repair: drop lowest-utility bundles until feasible.
+
+        Applied only when the anneal ended on an infeasible selection; the
+        repaired selection is always capacity-feasible and deterministic.
+        """
+        def is_feasible(sel):
+            edge_load = defaultdict(int)
+            mem_load = defaultdict(int)
+            for rid, bid in sel.items():
+                if bid is None:
+                    continue
+                for edge, d in self._edge_of.get((rid, bid), {}).items():
+                    edge_load[edge] += d
+                for node, d in self._mem_of.get((rid, bid), {}).items():
+                    mem_load[node] += d
+            for edge, load in edge_load.items():
+                if load > self.edge_capacities.get(edge, 0):
+                    return False
+            for node, load in mem_load.items():
+                if load > self.memory_capacities.get(node, 0):
+                    return False
+            return True
+
+        if is_feasible(selections):
+            return selections
+
+        ordered = sorted(
+            [(rid, bid) for rid, bid in selections.items() if bid is not None],
+            key=lambda rb: self._util_of.get(rb, 0.0),
+            reverse=True,
+        )
+        repaired = {}
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        for rid, bid in ordered:
+            feasible = True
+            for edge, d in self._edge_of.get((rid, bid), {}).items():
+                if edge_load[edge] + d > self.edge_capacities.get(edge, 0):
+                    feasible = False
+                    break
+            if feasible:
+                for node, d in self._mem_of.get((rid, bid), {}).items():
+                    if mem_load[node] + d > self.memory_capacities.get(node, 0):
+                        feasible = False
+                        break
+            if feasible:
+                repaired[rid] = bid
+                for edge, d in self._edge_of.get((rid, bid), {}).items():
+                    edge_load[edge] += d
+                for node, d in self._mem_of.get((rid, bid), {}).items():
+                    mem_load[node] += d
+        for rid in self.requests:
+            if rid not in repaired:
+                repaired[rid] = None
+        return repaired
+
     def solve(self, penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
               max_iterations=5000, initial_temperature=10.0, cooling_rate=0.99,
@@ -303,6 +360,9 @@ class MetropolisAnnealer:
             if best_energy < best_energy_overall:
                 best_overall = dict(best)
                 best_energy_overall = best_energy
+
+        best_overall = self._feasibility_repair(best_overall)
+        best_energy_overall = self._energy(best_overall)
 
         selected = [(rid, bid) for rid, bid in best_overall.items() if bid is not None]
         return {

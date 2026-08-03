@@ -43,28 +43,35 @@ def utility_density_greedy(bundles, edge_capacities, memory_capacities):
     for b in bundles:
         total_demand = sum(b["edge_demands"].values()) + sum(b["memory_demands"].values())
         density = b["utility"] / (total_demand + 1e-10)
-        scored.append((density, b))
-    scored.sort(reverse=True)
+        scored.append((density, -b["utility"], b["request_id"], b["bundle_id"], b))
+    scored.sort(key=lambda x: (x[0], x[1], x[2], x[3]), reverse=True)
 
     selections = {}
     assigned_requests = set()
-    for _, b in scored:
+    edge_load = defaultdict(int)
+    mem_load = defaultdict(int)
+    for _, _, _, _, b in scored:
         rid = b["request_id"]
         if rid in assigned_requests:
             continue
         feasible = True
         for edge, d in b["edge_demands"].items():
-            if d > ec.get(_undirected_edge(edge), 0):
+            e = _undirected_edge(edge)
+            if edge_load[e] + d > ec.get(e, 0):
                 feasible = False
                 break
         if feasible:
             for node, d in b["memory_demands"].items():
-                if d > mc.get(node, 0):
+                if mem_load[node] + d > mc.get(node, 0):
                     feasible = False
                     break
         if feasible:
             selections[rid] = b["bundle_id"]
             assigned_requests.add(rid)
+            for edge, d in b["edge_demands"].items():
+                edge_load[_undirected_edge(edge)] += d
+            for node, d in b["memory_demands"].items():
+                mem_load[node] += d
 
     for b in bundles:
         rid = b["request_id"]
@@ -82,28 +89,35 @@ def fidelity_aware_greedy(bundles, edge_capacities, memory_capacities):
     scored = []
     for b in bundles:
         score = b["utility"]
-        scored.append((score, b))
-    scored.sort(reverse=True)
+        scored.append((score, -b["utility"], b["request_id"], b["bundle_id"], b))
+    scored.sort(key=lambda x: (x[0], x[1], x[2], x[3]), reverse=True)
 
     selections = {}
     assigned_requests = set()
-    for _, b in scored:
+    edge_load = defaultdict(int)
+    mem_load = defaultdict(int)
+    for _, _, _, _, b in scored:
         rid = b["request_id"]
         if rid in assigned_requests:
             continue
         feasible = True
         for edge, d in b["edge_demands"].items():
-            if d > ec.get(_undirected_edge(edge), 0):
+            e = _undirected_edge(edge)
+            if edge_load[e] + d > ec.get(e, 0):
                 feasible = False
                 break
         if feasible:
             for node, d in b["memory_demands"].items():
-                if d > mc.get(node, 0):
+                if mem_load[node] + d > mc.get(node, 0):
                     feasible = False
                     break
         if feasible:
             selections[rid] = b["bundle_id"]
             assigned_requests.add(rid)
+            for edge, d in b["edge_demands"].items():
+                edge_load[_undirected_edge(edge)] += d
+            for node, d in b["memory_demands"].items():
+                mem_load[node] += d
 
     for b in bundles:
         rid = b["request_id"]

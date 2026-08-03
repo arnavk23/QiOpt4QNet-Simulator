@@ -18,6 +18,9 @@ from routing.bundle_generation import BundleGenerator
 from optimization.metropolis_annealer import MetropolisAnnealer
 from optimization.tensor_network_optimizer import TensorNetworkOptimizer
 from optimization.sequential_branch_optimizer import SequentialBranchOptimizer
+from optimization.qubo_optimizer import QUBOOptimizer
+from optimization.openjij_solver import solve_sa, solve_sqa
+from optimization.baselines import utility_density_greedy, fidelity_aware_greedy
 
 
 def _undirected_edge(e):
@@ -134,10 +137,26 @@ def main():
         ("Metropolis", MetropolisAnnealer, {"max_iterations": 2000}),
         ("TensorNetwork", TensorNetworkOptimizer, {"bond_dim": 6, "beta": 5.0}),
         ("BranchExpansion", SequentialBranchOptimizer, {"branch_factor": 8, "beta": 5.0}),
+        ("QUBO+SA", None, {"solve_sa": True}),
+        ("QUBO+SQA", None, {"solve_sa": False}),
+        ("Utility-Density Greedy", None, {"greedy": "ud"}),
+        ("Fidelity-Aware Greedy", None, {"greedy": "fid"}),
     ]:
         if solver_name == "Metropolis":
             opt = opt_cls(all_bundles, ec, mc, seed=42)
             result = opt.solve(**kwargs)
+        elif solver_name.startswith("QUBO"):
+            opt = QUBOOptimizer(all_bundles, ec, mc)
+            bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+            if kwargs["solve_sa"]:
+                response = solve_sa(bqm, num_reads=20, seed=1)
+            else:
+                response = solve_sqa(bqm, num_reads=10, seed=1)
+            selected = opt.decode_sample(response.first.sample, repair=True)
+            result = {"selected": selected}
+        elif solver_name.endswith("Greedy"):
+            fn = utility_density_greedy if kwargs["greedy"] == "ud" else fidelity_aware_greedy
+            result = fn(all_bundles, ec, mc)
         else:
             opt = opt_cls(all_bundles, ec, mc)
             result = opt.solve(**kwargs)
@@ -155,10 +174,26 @@ def main():
         ("Metropolis", MetropolisAnnealer, {"max_iterations": 2000}),
         ("TensorNetwork", TensorNetworkOptimizer, {"bond_dim": 6, "beta": 5.0}),
         ("BranchExpansion", SequentialBranchOptimizer, {"branch_factor": 8, "beta": 5.0}),
+        ("QUBO+SA", None, {"solve_sa": True}),
+        ("QUBO+SQA", None, {"solve_sa": False}),
+        ("Utility-Density Greedy", None, {"greedy": "ud"}),
+        ("Fidelity-Aware Greedy", None, {"greedy": "fid"}),
     ]:
         if solver_name == "Metropolis":
             opt = opt_cls(all_bundles, ec, mc, seed=42)
             result = opt.solve(**kwargs)
+        elif solver_name.startswith("QUBO"):
+            opt = QUBOOptimizer(all_bundles, ec, mc)
+            bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+            if kwargs["solve_sa"]:
+                response = solve_sa(bqm, num_reads=20, seed=1)
+            else:
+                response = solve_sqa(bqm, num_reads=10, seed=1)
+            selected = opt.decode_sample(response.first.sample, repair=True)
+            result = {"selected": selected}
+        elif solver_name.endswith("Greedy"):
+            fn = utility_density_greedy if kwargs["greedy"] == "ud" else fidelity_aware_greedy
+            result = fn(all_bundles, ec, mc)
         else:
             opt = opt_cls(all_bundles, ec, mc)
             result = opt.solve(**kwargs)

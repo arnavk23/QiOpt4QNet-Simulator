@@ -10,7 +10,7 @@ from network.request import Request
 from routing.path_generator import PathGenerator
 from routing.bundle_generation import BundleGenerator
 from optimization.qubo_optimizer import QUBOOptimizer
-from optimization.openjij_solver import solve_sa
+from optimization.openjij_solver import solve_sa, solve_sqa
 from optimization.metropolis_annealer import MetropolisAnnealer
 from optimization.tensor_network_optimizer import TensorNetworkOptimizer
 from optimization.refine_pipeline import TensorAnnealerPipeline
@@ -35,15 +35,41 @@ def extract_capacities(net):
     return edge_caps, mem_caps
 
 
+def decode_best_feasible(optimizer, response, congestion_penalty=0.05,
+                         memory_congestion_penalty=0.05):
+    best = []
+    best_energy = float("inf")
+    for sample in response.samples():
+        sel = optimizer.decode_sample(sample, repair=True)
+        if not sel:
+            continue
+        en = optimizer.solution_energy(
+            sel,
+            congestion_penalty=congestion_penalty,
+            memory_congestion_penalty=memory_congestion_penalty,
+        )
+        if en < best_energy:
+            best_energy = en
+            best = sel
+    return best, best_energy
+
+
 def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
     start = time.perf_counter()
-    if method == "qubo_sa":
+    if method in ("qubo_sa", "qubo_sqa"):
         try:
             optimizer = QUBOOptimizer(bundles, edge_caps, mem_caps)
-            bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
-            response = solve_sa(bqm, num_reads=kwargs.get("num_reads", 20))
-            selected = optimizer.decode_sample(response.first.sample)
-            energy = response.first.energy
+            bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+                                   congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+                                   memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05))
+            if method == "qubo_sqa":
+                response = solve_sqa(bqm, num_reads=kwargs.get("sqa_num_reads", 10))
+            else:
+                response = solve_sa(bqm, num_reads=kwargs.get("num_reads", 20))
+            selected, energy = decode_best_feasible(
+                optimizer, response,
+                kwargs.get("congestion_penalty", 0.05),
+                kwargs.get("memory_congestion_penalty", 0.05))
         except Exception as e:
             return {"name": name, "selected": [], "energy": None, "time": time.perf_counter() - start, "error": str(e)}
         elapsed = time.perf_counter() - start
@@ -55,6 +81,8 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             max_iterations=kwargs.get("max_iterations", 3000),
             initial_temperature=kwargs.get("initial_temperature", 10.0),
             cooling_rate=kwargs.get("cooling_rate", 0.97),
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": result["selected"], "energy": result["energy"], "time": elapsed}
@@ -66,6 +94,8 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             beta=kwargs.get("beta", 5.0),
             edge_penalty=10.0,
             memory_penalty=10.0,
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": result["selected"], "energy": result.get("energy"), "time": elapsed}
@@ -77,6 +107,8 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             tn_beta=kwargs.get("beta", 5.0),
             anneal_max_iterations=kwargs.get("max_iterations", 1500),
             anneal_initial_temperature=kwargs.get("initial_temperature", 3.0),
+            congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+            memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": result["selected"], "energy": result["final_energy"], "time": elapsed}
@@ -126,6 +158,7 @@ def main():
 
     solvers = [
         ("QUBO+SA (OpenJij)", "qubo_sa", {"num_reads": 20}),
+        ("QUBO+SQA (OpenJij)", "qubo_sqa", {"sqa_num_reads": 10}),
         ("Metropolis Annealer", "metropolis", {}),
         ("Tensor Network MPS", "tensor_network", {}),
         ("TN+Metro Pipeline", "pipeline", {}),

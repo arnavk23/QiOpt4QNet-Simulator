@@ -268,8 +268,32 @@ class TensorNetworkOptimizer:
         if greedy_util > mps_util:
             selections = greedy
 
+        # Recompute the energy for the final selection: repair and the greedy
+        # fallback can change the selection after the sweep-tracked best_energy.
+        act = {rid: bid for rid, bid in selections.items() if bid is not None}
+        util = sum(self._util_of.get((r, b), 0.0) for r, b in act.items())
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        for r, b in act.items():
+            for e, d in self._edge_of.get((r, b), {}).items():
+                edge_load[e] += d
+            for n_, d in self._mem_of.get((r, b), {}).items():
+                mem_load[n_] += d
+        pen = 0.0
+        for e, load in edge_load.items():
+            cap = self.edge_capacities.get(e, 0)
+            if load > cap:
+                pen += self._B * (load - cap) ** 2
+            pen += self._C * load * load
+        for n_, load in mem_load.items():
+            cap = self.memory_capacities.get(n_, 0)
+            if load > cap:
+                pen += self._D * (load - cap) ** 2
+            pen += self._E * load * load
+        final_energy = -util + pen
+
         selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
-        return {"selected": selected, "selections": selections, "energy": best_energy}
+        return {"selected": selected, "selections": selections, "energy": final_energy}
 
     def _greedy_seed(self):
         """Deterministic, load-aware greedy baseline (utility density, then utility, ids).

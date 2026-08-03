@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import combinations
 from pyqubo import Binary, Constraint, LogEncInteger, Num, Placeholder  # type: ignore
 
@@ -127,6 +128,19 @@ class QUBOOptimizer:
             label=name
         )
 
+    def _congestion_term(self, name, uses, penalty):
+        """Quadratic congestion term C*load^2 (and its memory analogue E*load^2).
+
+        (sum_i d_i x_i)^2 = sum_i d_i^2 x_i + sum_{i<j} 2 d_i d_j x_i x_j,
+        so the binary-square expansion reproduces the paper's congestion term
+        inside the QUBO itself.
+        """
+        load = sum(
+            amount * self.variables[key]
+            for key, amount in uses
+        )
+        return penalty * (load * load)
+
 #H=H_{utility}+H_{one bundle per request}+H_{edge}+H_{memory}
     def _build_hamiltonian(self):
         hamiltonian = 0
@@ -162,19 +176,124 @@ class QUBOOptimizer:
                 self.memory_capacities[node],
                 memory_penalty
             )
+        congestion_penalty = Placeholder("C")
+        for index, (edge,uses) in enumerate(self.edge_demands.items()):
+            hamiltonian += self._congestion_term(
+                f"cong_edge_{index}",
+                uses,
+                congestion_penalty
+            )
+        memory_congestion_penalty = Placeholder("E")
+        for index, (node,uses) in enumerate(self.memory_demands.items()):
+            hamiltonian += self._congestion_term(
+                f"cong_mem_{index}",
+                uses,
+                memory_congestion_penalty
+            )
         if isinstance(hamiltonian, (int, float)):
             return Num(hamiltonian)
         return hamiltonian
     
-    def decode_sample(self, sample):
+    def _demands_of(self, request_id, bundle_id):
+        for bundle in self.bundles:
+            if bundle["request_id"] == request_id and bundle["bundle_id"] == bundle_id:
+                return bundle["edge_demands"], bundle["memory_demands"]
+        return None
+
+    def repair_selection(self, selected):
+        """Deterministic greedy feasibility repair for a decoded sample.
+
+        Requests are processed in descending order of the utility of their
+        decoded bundle; a bundle is kept only if it still fits alongside the
+        already-kept selections. The returned selection is always
+        capacity-feasible, and the repair is deterministic.
+        """
+        selected_map = dict(selected)
+        order = {}
+        for bundle in self.bundles:
+            key = self._bundle_key(bundle)
+            if key[0] in selected_map and selected_map[key[0]] == key[1]:
+                order[key[0]] = (bundle["utility"], key[0], key[1])
+        ordered_requests = sorted(order, key=lambda rid: order[rid], reverse=True)
+
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        repaired = []
+        for rid in ordered_requests:
+            bid = selected_map[rid]
+            demands = self._demands_of(rid, bid)
+            if demands is None:
+                continue
+            edge_demands, mem_demands = demands
+            feasible = True
+            for edge, d in edge_demands.items():
+                e = self._undirected_edge(edge)
+                if edge_load[e] + d > self.edge_capacities.get(e, 0):
+                    feasible = False
+                    break
+            if feasible:
+                for node, d in mem_demands.items():
+                    if mem_load[node] + d > self.memory_capacities.get(node, 0):
+                        feasible = False
+                        break
+            if feasible:
+                repaired.append((rid, bid))
+                for edge, d in edge_demands.items():
+                    edge_load[self._undirected_edge(edge)] += d
+                for node, d in mem_demands.items():
+                    mem_load[node] += d
+        return repaired
+
+    def decode_sample(self, sample, repair=False):
         selected = []
         for variable, bundle_key in self.variable_map.items():
             if sample[variable] == 1:
                 selected.append(bundle_key)
+        if repair:
+            selected = self.repair_selection(selected)
         return selected
 
-    def to_qubo(self, penalty, edge_penalty, memory_penalty):
-        return self.model.to_qubo(feed_dict={"A": penalty, "B": edge_penalty, "D": memory_penalty})
+    def solution_energy(self, selected, edge_penalty=10.0, memory_penalty=10.0,
+                        congestion_penalty=0.05, memory_congestion_penalty=0.05):
+        """Exact Hamiltonian energy of a decoded selection, matching the QUBO.
 
-    def to_bqm(self, penalty, edge_penalty, memory_penalty):
-        return self.model.to_bqm(feed_dict={"A": penalty, "B": edge_penalty, "D": memory_penalty})
+        For a capacity-feasible selection the request-conflict penalty (A) is
+        identically zero, so only utility, overload, and congestion terms
+        contribute---the same convention used by the other solvers.
+        """
+        selected_map = dict(selected)
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        utility = 0.0
+        for bundle in self.bundles:
+            rid, bid = self._bundle_key(bundle)
+            if selected_map.get(rid) == bid:
+                utility += bundle["utility"]
+                for e, d in bundle["edge_demands"].items():
+                    edge_load[self._undirected_edge(e)] += d
+                for n, d in bundle["memory_demands"].items():
+                    mem_load[n] += d
+        pen = 0.0
+        for e, load in edge_load.items():
+            cap = self.edge_capacities.get(e, 0)
+            if load > cap:
+                pen += edge_penalty * (load - cap) ** 2
+            pen += congestion_penalty * load * load
+        for n, load in mem_load.items():
+            cap = self.memory_capacities.get(n, 0)
+            if load > cap:
+                pen += memory_penalty * (load - cap) ** 2
+            pen += memory_congestion_penalty * load * load
+        return -utility + pen
+
+    def to_qubo(self, penalty, edge_penalty, memory_penalty,
+                congestion_penalty=0.05, memory_congestion_penalty=0.05):
+        return self.model.to_qubo(feed_dict={
+            "A": penalty, "B": edge_penalty, "D": memory_penalty,
+            "C": congestion_penalty, "E": memory_congestion_penalty})
+
+    def to_bqm(self, penalty, edge_penalty, memory_penalty,
+               congestion_penalty=0.05, memory_congestion_penalty=0.05):
+        return self.model.to_bqm(feed_dict={
+            "A": penalty, "B": edge_penalty, "D": memory_penalty,
+            "C": congestion_penalty, "E": memory_congestion_penalty})

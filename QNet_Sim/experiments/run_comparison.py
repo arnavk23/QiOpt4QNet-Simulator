@@ -23,7 +23,7 @@ from network.topology import generate_chain, generate_grid, generate_random
 from routing.path_generator import PathGenerator
 from routing.bundle_generation import BundleGenerator
 from optimization.qubo_optimizer import QUBOOptimizer
-from optimization.openjij_solver import solve_sa
+from optimization.openjij_solver import solve_sa, solve_sqa
 from optimization.metropolis_annealer import MetropolisAnnealer
 from optimization.tensor_network_optimizer import TensorNetworkOptimizer
 from optimization.sequential_branch_optimizer import SequentialBranchOptimizer
@@ -66,12 +66,19 @@ def extract_capacities(net):
 
 def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
     start = time.perf_counter()
-    if method == "qubo_sa":
+    if method in ("qubo_sa", "qubo_sqa"):
         optimizer = QUBOOptimizer(bundles, edge_caps, mem_caps)
-        bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
-        response = solve_sa(bqm, num_reads=kwargs.get("num_reads", 50))
-        selected = optimizer.decode_sample(response.first.sample)
-        energy = response.first.energy
+        bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+                               congestion_penalty=kwargs.get("congestion_penalty", 0.05),
+                               memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05))
+        if method == "qubo_sqa":
+            response = solve_sqa(bqm, num_reads=kwargs.get("sqa_num_reads", 10))
+        else:
+            response = solve_sa(bqm, num_reads=kwargs.get("num_reads", 50))
+        selected, energy = decode_best_feasible(
+            optimizer, response,
+            kwargs.get("congestion_penalty", 0.05),
+            kwargs.get("memory_congestion_penalty", 0.05))
         elapsed = time.perf_counter() - start
         return {"name": name, "selected": selected, "energy": energy, "time": elapsed}
 
@@ -98,7 +105,7 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
             memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
         elapsed = time.perf_counter() - start
-        return {"name": name, "selected": result["selected"], "energy": None, "time": elapsed}
+        return {"name": name, "selected": result["selected"], "energy": result.get("energy"), "time": elapsed}
 
     elif method == "sequential_branch":
         opt = SequentialBranchOptimizer(bundles, edge_caps, mem_caps)
@@ -124,6 +131,26 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
         return {"name": name, "selected": result["selected"], "energy": None, "time": elapsed}
 
     return {"name": name, "selected": [], "energy": None, "time": 0}
+
+
+def decode_best_feasible(optimizer, response, congestion_penalty=0.05,
+                         memory_congestion_penalty=0.05):
+    """Decode and repair every sample, then return the best-energy feasible one."""
+    best = []
+    best_energy = float("inf")
+    for sample in response.samples():
+        sel = optimizer.decode_sample(sample, repair=True)
+        if not sel:
+            continue
+        en = optimizer.solution_energy(
+            sel,
+            congestion_penalty=congestion_penalty,
+            memory_congestion_penalty=memory_congestion_penalty,
+        )
+        if en < best_energy:
+            best_energy = en
+            best = sel
+    return best, best_energy
 
 
 def compute_metrics(result, bundles, edge_caps, mem_caps):
@@ -181,6 +208,7 @@ def run_experiment(net, requests, edge_caps, mem_caps, label=""):
 
     solvers = [
         ("QUBO+SA (OpenJij)", "qubo_sa"),
+        ("QUBO+SQA (OpenJij)", "qubo_sqa"),
         ("Metropolis Annealer", "metropolis"),
         ("Sequential Branch Expansion", "sequential_branch"),
         ("Tensor Network MPS", "tensor_network"),

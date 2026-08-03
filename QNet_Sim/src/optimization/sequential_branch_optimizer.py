@@ -160,7 +160,7 @@ class SequentialBranchOptimizer:
 
     def solve(self, edge_penalty=10.0, memory_penalty=10.0,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
-              beta=5.0, branch_factor=8, n_orderings=2):
+              beta=5.0, branch_factor=8, n_orderings=3, prune_infeasible=True):
         self._B = edge_penalty
         self._D = memory_penalty
         self._C = congestion_penalty
@@ -193,11 +193,22 @@ class SequentialBranchOptimizer:
                         new_sel[rid] = bid
                         new_edge = dict(edge_load)
                         new_mem = dict(mem_load)
+                        feasible = True
                         if bid is not None:
                             for e, d in self._edge_of.get((rid, bid), {}).items():
-                                new_edge[e] = new_edge.get(e, 0) + d
+                                load = new_edge.get(e, 0) + d
+                                if prune_infeasible and load > self.edge_capacities.get(e, 0):
+                                    feasible = False
+                                    break
+                                new_edge[e] = load
                             for n, d in self._mem_of.get((rid, bid), {}).items():
-                                new_mem[n] = new_mem.get(n, 0) + d
+                                load = new_mem.get(n, 0) + d
+                                if prune_infeasible and load > self.memory_capacities.get(n, 0):
+                                    feasible = False
+                                    break
+                                new_mem[n] = load
+                        if not feasible:
+                            continue
                         new_beams.append((new_sel, new_edge, new_mem, energy + delta))
 
                 # Boltzmann survival weight + deterministic tie-break (G13):
