@@ -1,1 +1,222 @@
 # QiOpt4QNet-Simulator
+
+A quantum-network simulation and optimization framework. It models quantum
+repeater networks (nodes with limited quantum memory, lossy/noisy links,
+entanglement generation and swapping), builds candidate route +
+purification "bundles" for service requests, and compares multiple ways of
+deciding which bundles to admit under capacity constraints — from exact
+MILP solving and quantum/QUBO annealing to classical heuristics and a
+learned ranking model.
+
+## What's in here
+
+| Layer | Purpose |
+|---|---|
+| `network/` | Graph-based network model: nodes (quantum memory), links (fidelity, success probability, capacity, latency), request objects, and topology generators |
+| `models/` | Physical quantum state model (density matrices), decoherence, entanglement swapping |
+| `protocols/` | SimPy-driven discrete-event protocols: entanglement generation and swapping over a simulated timeline |
+| `fidelity/` | Werner-state fidelity math: entanglement swapping, BBPSSW purification, end-to-end path fidelity |
+| `routing/` | Candidate path generation, per-path/per-purification-level "bundle" construction, resource-demand and success-probability models, and the utility function used to score bundles |
+| `optimization/` | Solvers that decide which bundle to admit per request under edge/memory capacity constraints: exact QUBO formulation (pyqubo), simulated/quantum annealing (OpenJij), a Metropolis annealer, and a tensor-network optimizer |
+| `baselines/` | Classical (non-quantum) allocation baselines, an exact CP-SAT reference solver, shared feasibility/metrics tooling, and a starter ML candidate-ranking model — all built to slot into the same interface as `optimization/` |
+| `tests/` | Unit tests for every layer above |
+
+## Core data model
+
+**`QuantumNetwork`** wraps a `networkx.Graph`. Nodes are `QuantumNode`
+(memory capacity, T1/T2 decoherence times, per-qubit memory reservations).
+Edges are `QuantumLink` (fidelity, generation probability, latency,
+capacity).
+
+**`Request`** is a service request: `source`, `destination`,
+`minimum_fidelity`, `weight` (priority).
+
+**`Bundle`** (in `routing/bundle_generation.py`) is a *candidate solution*
+for a request: a specific path with a specific number of purification
+rounds per hop, carrying its resulting end-to-end fidelity, latency,
+success probability, resource demand (edges + memory), and a computed
+`utility` score. Every optimizer and baseline in this repo consumes lists
+of bundles and decides which single bundle (if any) to admit per request.
+
+Two dict views are used depending on how much detail a solver needs:
+
+- `Bundle.to_optimizer_dict()` — the minimal fields every solver requires:
+  `bundle_id, request_id, path, edge_demands, memory_demands, utility`
+- `Bundle.to_dict()` — the full set, additionally including `fidelity`,
+  `success_probability`, `latency`, `bell_pair_cost`, `purification_rounds`
+
+## Pipeline
+
+topology.generate_*() -> QuantumNetwork
+|
+requests: list[Request] (baselines/request_generator.py, or built by hand)
+|
+PathGenerator / CandidatePathGenerator
+-> candidate paths per request
+|
+BundleGenerator.generate_bundles(request, candidate_paths)
+-> list[Bundle] (one per path x purification-level combination)
+|
+[b.to_optimizer_dict() for b in bundles], edge_capacities, memory_capacities
+|
+v
+┌─────────────────────────────┬──────────────────────────────┐
+│ optimization/ │ baselines/ │
+│ - QUBOOptimizer (pyqubo) │ - 8 classical allocators │
+│ - MetropolisAnnealer │ - CPSATAllocator (exact) │
+│ - TensorNetworkOptimizer │ - BundleRankingModel (ML) │
+│ - OpenJij SA / SQA sampler │ │
+└─────────────────────────────┴──────────────────────────────┘
+|
+result: {"selected": [(request_id, bundle_id), ...], "total_utility": ...}
+|
+baselines/feasibility.py: compute_metrics() / compare_all() / print_comparison()
+
+
+Every solver — quantum or classical — returns the same
+`{"selected": [...], "total_utility": ...}` shape, so any of them can be
+dropped into `baselines/feasibility.py`'s comparison tooling interchangeably.
+
+## Installation
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate    # or .venv\Scripts\activate on Windows
+
+pip install numpy networkx matplotlib simpy dimod openjij pyqubo scikit-learn pytest
+pip install ortools           # optional: enables the exact CP-SAT baseline
+```
+
+(If your environment enforces PEP 668, add `--break-system-packages` to
+the pip commands, or just use a venv as above.)
+
+Tests and demo scripts assume `src/` is on the Python path. `pyproject.toml`
+already configures this for pytest, and the demo scripts add it themselves
+at the top of the file, so no manual `PYTHONPATH` is needed for those. For
+your own scripts, either run from `QNet_Sim/` with `PYTHONPATH=src`, or
+add `sys.path.insert(0, "src")` before importing.
+
+## Running things
+
+**Discrete-event protocol simulation** (entanglement generation/swapping
+over simulated time):
+```bash
+python3 run_simulation_demo.py
+```
+
+**Quantum/QUBO optimizers** (QUBOOptimizer, OpenJij SA/SQA,
+MetropolisAnnealer, TensorNetworkOptimizer) on a generated instance:
+```bash
+python3 run_quantum_optimizers_demo.py
+```
+
+**Bundle generation walkthrough** (candidate paths → bundles → one
+optimizer):
+```bash
+python3 run_bundle_optimizer_demo.py
+```
+
+**Classical baselines vs. quantum optimizers**, side by side on the same
+instance:
+```bash
+python3 run_classical_baselines_demo.py
+```
+
+**Interactive demo**:
+```bash
+python3 run_interactive_demo.py
+```
+
+**Tests:**
+```bash
+PYTHONPATH=src python3 -m pytest tests/ -v
+```
+
+## Classical baselines (`baselines/`)
+
+These exist to answer "is the quantum/QUBO solver actually worth it?" —
+they share the exact interface `QUBOOptimizer` and `MetropolisAnnealer`
+use, so they can be benchmarked head-to-head with no glue code.
+
+```python
+from baselines.classical_baselines import run_all_baselines
+from baselines.feasibility import compare_all, print_comparison
+
+opt_bundles = [b.to_optimizer_dict() for b in bundles]
+results = run_all_baselines(opt_bundles, edge_capacities, memory_capacities, seed=42)
+metrics = compare_all(results, opt_bundles, edge_capacities, memory_capacities)
+print_comparison(metrics)
+```
+
+Included allocators:
+
+- `random_feasible` — random order, random pick; sanity-check lower bound
+- `shortest_feasible_path` — fewest hops first
+- `highest_fidelity_first` / `highest_success_first` / `lowest_resource_cost_first` — per-request greedy heuristics
+- `utility_per_resource_greedy` — global greedy by utility-per-resource
+- `congestion_aware_greedy` — global greedy, rescored against *residual* capacity after every pick
+- `greedy_local_search` — greedy seed + hill-climbing swaps
+- `cp_sat_exact` — exact MILP via OR-Tools CP-SAT (requires `pip install ortools`); this is the reference/oracle solution
+
+`baselines/feasibility.py` provides `FeasibilityChecker`, `compute_metrics`
+(acceptance rate, total utility, average fidelity, capacity violations,
+edge/memory utilization, optimality gap vs. a reference), `compare_all`,
+and `print_comparison`.
+
+`baselines/request_generator.py` and `baselines/path_strategies.py`
+provide reusable low/medium/high-load workload generation and additional
+candidate-path strategies (highest-fidelity, highest-success,
+lowest-latency, capacity-aware) on top of `PathGenerator`'s k-shortest-paths.
+
+## ML candidate-ranking baseline
+
+`baselines/dataset_generator.py` runs the CP-SAT exact solver as an oracle
+over many random instances and writes per-candidate-bundle features +
+whether the oracle selected them:
+
+```python
+from baselines.dataset_generator import generate_dataset
+path = generate_dataset(n_instances=50, out_path="dataset.jsonl", n_nodes=8, load="medium")
+```
+
+`baselines/ranking_model.py` trains a small MLP to imitate the oracle's
+selections, and a feasibility-aware greedy decoder turns its scores into a
+valid (capacity-respecting) allocation:
+
+```python
+from baselines.ranking_model import load_dataset, BundleRankingModel, feasibility_aware_decode
+
+records = load_dataset(path)
+model = BundleRankingModel().fit(records)
+scores = model.score_bundles(candidate_dicts)   # {(request_id, bundle_id): score}
+result = feasibility_aware_decode(opt_bundles, scores, edge_capacities, memory_capacities)
+```
+
+This is a flat-feature starter model. The work plan calls for a graph
+encoder (GraphSAGE/GAT) over network structure eventually — swap it in for
+`BundleRankingModel` without touching the decoder, since
+`feasibility_aware_decode` only needs a `{(request_id, bundle_id): score}`
+mapping regardless of how the scores were produced.
+
+## Physics notes
+
+- Fidelities are modeled as Werner-state parameters. Entanglement swapping
+  combines two link fidelities via `f1*f2 + (1-f1)(1-f2)/3`; BBPSSW
+  purification improves fidelity probabilistically (only above F > 0.5)
+  at a known success-probability cost.
+- `models/quantum_state.py` additionally implements a full density-matrix
+  simulation (2-qubit Bell states, T1/T2 decoherence channels, and
+  entanglement swapping via Kraus operators and partial trace) used by the
+  SimPy protocol simulation in `protocols/`.
+- `routing/utility.py` scores a bundle as
+  `weight * success_probability * (1 + beta * max(0, fidelity - min_fidelity)) - lambda_latency * latency - lambda_cost * bell_pair_cost` —
+  rewarding fidelity margin above the request's requirement while
+  penalizing latency and resource cost.
+
+## Project status
+
+Actively developed. The entanglement-routing formulation (fidelity models,
+purification rules, memory constraints, objective function) is expected to
+evolve — the bundle/optimizer interface is intentionally decoupled from
+those physical models so they can change without breaking the optimization
+or baseline layers.
