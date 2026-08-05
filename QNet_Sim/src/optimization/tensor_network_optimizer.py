@@ -3,10 +3,16 @@ from collections import defaultdict
 
 
 class TensorNetworkOptimizer:
-    def __init__(self, bundles, edge_capacities, memory_capacities):
+    def __init__(self, bundles, edge_capacities, memory_capacities,
+                 congestion_weight=0.0, congestion_threshold=0.7,
+                 risk_weight=0.0, risk_tau=1.0):
         self.bundles = bundles
         self.edge_capacities = {self._undirected_edge(k): v for k, v in edge_capacities.items()}
         self.memory_capacities = memory_capacities
+        self.congestion_weight = congestion_weight
+        self.congestion_threshold = congestion_threshold
+        self.risk_weight = risk_weight
+        self.risk_tau = risk_tau
         self._validate()
         self._group_by_request()
         self._precompute()
@@ -37,11 +43,33 @@ class TensorNetworkOptimizer:
         self._util_of = {}
         self._edge_of = {}
         self._mem_of = {}
+        self._latency_of = {}
         for b in self.bundles:
             key = (b["request_id"], b["bundle_id"])
             self._util_of[key] = b["utility"]
             self._edge_of[key] = {self._undirected_edge(e): d for e, d in b["edge_demands"].items()}
             self._mem_of[key] = dict(b["memory_demands"])
+            self._latency_of[key] = b.get("latency", 0.0)
+
+    def _soft_cong_pen(self, e, load):
+        """Soft congestion: lambda_cong * max(0, L_e/C_e - theta)^2."""
+        if self.congestion_weight <= 0:
+            return 0.0
+        cap = self.edge_capacities.get(e, 0)
+        if cap <= 0:
+            return 0.0
+        ratio = load / cap
+        if ratio <= self.congestion_threshold:
+            return 0.0
+        return self.congestion_weight * (ratio - self.congestion_threshold) ** 2
+
+    def _risk_of(self, rid, bid):
+        """Memory decoherence risk: lambda_risk * (1 - exp(-latency/tau))."""
+        if self.risk_weight <= 0 or bid is None:
+            return 0.0
+        wait = self._latency_of.get((rid, bid), 0.0)
+        import math
+        return self.risk_weight * (1.0 - math.exp(-wait / self.risk_tau))
 
     def _get_options(self, rid):
         return [None] + [b["bundle_id"] for b in self.bundles_per_request[rid]]
@@ -111,11 +139,13 @@ class TensorNetworkOptimizer:
             if d > cap:
                 pen += self._B * (d - cap) ** 2
             pen += self._C * d * d
+            pen += self._soft_cong_pen(edge, d)
         for node, d in self._mem_of.get((rid, bid), {}).items():
             cap = self.memory_capacities.get(node, 0)
             if d > cap:
                 pen += self._D * (d - cap) ** 2
             pen += self._E * d * d
+        pen += self._risk_of(rid, bid)
         return pen
 
     def _pairwise_penalty(self, rid_l, bid_l, rid_r, bid_r):
@@ -131,6 +161,7 @@ class TensorNetworkOptimizer:
             if dl + dr > self.edge_capacities.get(edge, 0):
                 pen += self._B * (dl + dr - self.edge_capacities[edge]) ** 2
             pen += 2.0 * self._C * dl * dr
+            pen += self._soft_cong_pen(edge, dl + dr)
         for node in shared_mems:
             dl = self._mem_of.get((rid_l, bid_l), {}).get(node, 0)
             dr = self._mem_of.get((rid_r, bid_r), {}).get(node, 0)
@@ -153,6 +184,7 @@ class TensorNetworkOptimizer:
             if total > cap:
                 pen += self._B * (total - cap) ** 2
             pen += self._C * total * total
+            pen += self._soft_cong_pen(edge, total)
         for node, d in self._mem_of.get((rid, bid), {}).items():
             total = d
             for o_rid, o_bid in other_selections.items():
@@ -162,7 +194,39 @@ class TensorNetworkOptimizer:
             if total > cap:
                 pen += self._D * (total - cap) ** 2
             pen += self._E * total * total
+        pen += self._risk_of(rid, bid)
         return pen
+
+    def _selection_energy(self, selections):
+        """Full Hamiltonian energy of a selection: -utility + hard/soft penalties
+        + memory risk.  Mirrors the energy convention of the Metropolis annealer
+        so the two solvers are directly comparable."""
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        util = 0.0
+        risk = 0.0
+        for rid, bid in selections.items():
+            if bid is None:
+                continue
+            util += self._util_of.get((rid, bid), 0.0)
+            for e, d in self._edge_of.get((rid, bid), {}).items():
+                edge_load[e] += d
+            for n_, d in self._mem_of.get((rid, bid), {}).items():
+                mem_load[n_] += d
+            risk += self._risk_of(rid, bid)
+        pen = 0.0
+        for e, load in edge_load.items():
+            cap = self.edge_capacities.get(e, 0)
+            if load > cap:
+                pen += self._B * (load - cap) ** 2
+            pen += self._C * load * load
+            pen += self._soft_cong_pen(e, load)
+        for n_, load in mem_load.items():
+            cap = self.memory_capacities.get(n_, 0)
+            if load > cap:
+                pen += self._D * (load - cap) ** 2
+            pen += self._E * load * load
+        return -util + pen + risk
 
     def solve(self, edge_penalty=10.0, memory_penalty=10.0,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
@@ -228,26 +292,7 @@ class TensorNetworkOptimizer:
                     used_assignments[rid] = selections[rid]
 
             act = {rid: bid for rid, bid in selections.items() if bid is not None}
-            util = sum(self._util_of.get((r, b), 0.0) for r, b in act.items())
-            edge_load = defaultdict(int)
-            mem_load = defaultdict(int)
-            for r, b in act.items():
-                for e, d in self._edge_of.get((r, b), {}).items():
-                    edge_load[e] += d
-                for n_, d in self._mem_of.get((r, b), {}).items():
-                    mem_load[n_] += d
-            pen = 0.0
-            for e, load in edge_load.items():
-                cap = self.edge_capacities.get(e, 0)
-                if load > cap:
-                    pen += self._B * (load - cap) ** 2
-                pen += self._C * load * load
-            for n_, load in mem_load.items():
-                cap = self.memory_capacities.get(n_, 0)
-                if load > cap:
-                    pen += self._D * (load - cap) ** 2
-                pen += self._E * load * load
-            energy = -util + pen
+            energy = self._selection_energy(selections)
 
             if energy < best_energy:
                 best_energy = energy
@@ -270,27 +315,7 @@ class TensorNetworkOptimizer:
 
         # Recompute the energy for the final selection: repair and the greedy
         # fallback can change the selection after the sweep-tracked best_energy.
-        act = {rid: bid for rid, bid in selections.items() if bid is not None}
-        util = sum(self._util_of.get((r, b), 0.0) for r, b in act.items())
-        edge_load = defaultdict(int)
-        mem_load = defaultdict(int)
-        for r, b in act.items():
-            for e, d in self._edge_of.get((r, b), {}).items():
-                edge_load[e] += d
-            for n_, d in self._mem_of.get((r, b), {}).items():
-                mem_load[n_] += d
-        pen = 0.0
-        for e, load in edge_load.items():
-            cap = self.edge_capacities.get(e, 0)
-            if load > cap:
-                pen += self._B * (load - cap) ** 2
-            pen += self._C * load * load
-        for n_, load in mem_load.items():
-            cap = self.memory_capacities.get(n_, 0)
-            if load > cap:
-                pen += self._D * (load - cap) ** 2
-            pen += self._E * load * load
-        final_energy = -util + pen
+        final_energy = self._selection_energy(selections)
 
         selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
         return {"selected": selected, "selections": selections, "energy": final_energy}

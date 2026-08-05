@@ -4,7 +4,9 @@ from collections import defaultdict
 
 
 class MetropolisAnnealer:
-    def __init__(self, bundles, edge_capacities, memory_capacities, seed=None):
+    def __init__(self, bundles, edge_capacities, memory_capacities, seed=None,
+                 congestion_weight=0.0, congestion_threshold=0.7,
+                 risk_weight=0.0, risk_tau=1.0):
         self.bundles = bundles
         self.edge_capacities = {self._undirected_edge(k): v for k, v in edge_capacities.items()}
         self.memory_capacities = memory_capacities
@@ -16,6 +18,10 @@ class MetropolisAnnealer:
         self._D = 10.0
         self._C = 0.05
         self._E = 0.05
+        self.congestion_weight = congestion_weight
+        self.congestion_threshold = congestion_threshold
+        self.risk_weight = risk_weight
+        self.risk_tau = risk_tau
 
     @staticmethod
     def _undirected_edge(edge):
@@ -34,6 +40,7 @@ class MetropolisAnnealer:
         self._util_of = {}
         self._edge_of = {}
         self._mem_of = {}
+        self._latency_of = {}
         for b in self.bundles:
             rid = b["request_id"]
             if rid not in self.bundles_per_request:
@@ -47,6 +54,30 @@ class MetropolisAnnealer:
                 edge_demands[tuple(sorted(e))] = d
             self._edge_of[key] = edge_demands
             self._mem_of[key] = b["memory_demands"]
+            self._latency_of[key] = b.get("latency", 0.0)
+
+    def _edge_congestion_pen(self, e, load):
+        """Soft congestion term: lambda_cong * max(0, L_e/C_e - theta)^2.
+
+        Zero below the warning threshold, quadratic above it.  Provides a
+        smooth load-balancing gradient separate from the hard capacity term.
+        """
+        if self.congestion_weight <= 0:
+            return 0.0
+        cap = self.edge_capacities.get(e, 0)
+        if cap <= 0:
+            return 0.0
+        ratio = load / cap
+        if ratio <= self.congestion_threshold:
+            return 0.0
+        return self.congestion_weight * (ratio - self.congestion_threshold) ** 2
+
+    def _memory_risk_of(self, key):
+        """Memory decoherence risk: lambda_risk * (1 - exp(-latency/tau))."""
+        if self.risk_weight <= 0:
+            return 0.0
+        wait = self._latency_of.get(key, 0.0)
+        return self.risk_weight * (1.0 - math.exp(-wait / self.risk_tau))
 
     def _edge_pen(self, e, load):
         """Edge penalty: overload term (paper) + quadratic congestion term (paper G1)."""
@@ -84,8 +115,11 @@ class MetropolisAnnealer:
         energy = -total_utility
         for edge, load in edge_load.items():
             energy += self._edge_pen(edge, load)
+            energy += self._edge_congestion_pen(edge, load)
         for node, load in mem_load.items():
             energy += self._mem_pen(node, load)
+        for key in (k for k in self._util_of if selections.get(k[0]) == k[1]):
+            energy += self._memory_risk_of(key)
         return energy
 
     def _loads(self, selections):
@@ -118,34 +152,40 @@ class MetropolisAnnealer:
 
         old_edges = self._edge_of.get((rid, old_bid), {}) if old_bid is not None else {}
         new_edges = self._edge_of.get((rid, new_bid), {}) if new_bid is not None else {}
-        for e in set(old_edges) | set(new_edges):
+        for e in sorted(set(old_edges) | set(new_edges)):
             d_old = old_edges.get(e, 0)
             d_new = new_edges.get(e, 0)
             load_old = edge_load.get(e, 0)
             load_new = load_old - d_old + d_new
             delta += self._edge_pen(e, load_new) - self._edge_pen(e, load_old)
+            delta += (self._edge_congestion_pen(e, load_new)
+                      - self._edge_congestion_pen(e, load_old))
 
         old_mems = self._mem_of.get((rid, old_bid), {}) if old_bid is not None else {}
         new_mems = self._mem_of.get((rid, new_bid), {}) if new_bid is not None else {}
-        for n in set(old_mems) | set(new_mems):
+        for n in sorted(set(old_mems) | set(new_mems)):
             d_old = old_mems.get(n, 0)
             d_new = new_mems.get(n, 0)
             load_old = mem_load.get(n, 0)
             load_new = load_old - d_old + d_new
             delta += self._mem_pen(n, load_new) - self._mem_pen(n, load_old)
 
+        old_risk = self._memory_risk_of((rid, old_bid)) if old_bid is not None else 0.0
+        new_risk = self._memory_risk_of((rid, new_bid)) if new_bid is not None else 0.0
+        delta += old_risk - new_risk
+
         return delta
 
     def _apply_delta(self, rid, old_bid, new_bid, edge_load, mem_load):
         old_edges = self._edge_of.get((rid, old_bid), {}) if old_bid is not None else {}
         new_edges = self._edge_of.get((rid, new_bid), {}) if new_bid is not None else {}
-        for e in set(old_edges) | set(new_edges):
+        for e in sorted(set(old_edges) | set(new_edges)):
             d_old = old_edges.get(e, 0)
             d_new = new_edges.get(e, 0)
             edge_load[e] += d_new - d_old
         old_mems = self._mem_of.get((rid, old_bid), {}) if old_bid is not None else {}
         new_mems = self._mem_of.get((rid, new_bid), {}) if new_bid is not None else {}
-        for n in set(old_mems) | set(new_mems):
+        for n in sorted(set(old_mems) | set(new_mems)):
             d_old = old_mems.get(n, 0)
             d_new = new_mems.get(n, 0)
             mem_load[n] += d_new - d_old

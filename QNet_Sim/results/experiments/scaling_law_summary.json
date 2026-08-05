@@ -1,0 +1,170 @@
+{
+  "metropolis": {
+    "model": "Q(t,N) = Q_opt - c1*N*exp(-t/(c2*N))",
+    "q_opt": 595.6886708220097,
+    "c1": 1.6327137004275606e-27,
+    "c2": 156.5738880929265,
+    "r2": -4.845004242248763e-08,
+    "n_points": 12
+  },
+  "mps": {
+    "model": "Q(N;chi) = Q_opt - c3(N)*exp(-c4*chi), t ~ c5*N*chi^3",
+    "per_n": {
+      "8": {
+        "q_opt": 334.58455364618976,
+        "c3": 0.0,
+        "c4": null,
+        "c5": 0.0001381118455450081,
+        "r2": null,
+        "note": "quality saturated at chi_min (c3 -> 0)"
+      },
+      "16": {
+        "q_opt": 533.3291259928772,
+        "c3": 0.0,
+        "c4": null,
+        "c5": 0.00034812156432596775,
+        "r2": null,
+        "note": "quality saturated at chi_min (c3 -> 0)"
+      },
+      "24": {
+        "q_opt": 918.9921227748662,
+        "c3": 0.0,
+        "c4": null,
+        "c5": 0.00019097490900655916,
+        "r2": null,
+        "note": "quality saturated at chi_min (c3 -> 0)"
+      }
+    }
+  },
+  "crossover": {
+    "threshold_fraction": 0.9,
+    "crossover": {
+      "n_requests": 8,
+      "bond_dim": 2,
+      "metropolis_time_s": 0.20459157999903255,
+      "tn_time_s": 0.008839158114880518
+    },
+    "rows": [
+      {
+        "n_requests": 8,
+        "bond_dim": 2,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.20459157999903255,
+        "tn_time_s": 0.008839158114880518,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 8,
+        "bond_dim": 4,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.20459157999903255,
+        "tn_time_s": 0.008839158114880518,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 8,
+        "bond_dim": 8,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.20459157999903255,
+        "tn_time_s": 0.008839158114880518,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 8,
+        "bond_dim": 16,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.20459157999903255,
+        "tn_time_s": 0.008839158114880518,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 8,
+        "bond_dim": 32,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.20459157999903255,
+        "tn_time_s": 0.008839158114880518,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 16,
+        "bond_dim": 2,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.28964788899975247,
+        "tn_time_s": 0.04455956023372387,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 16,
+        "bond_dim": 4,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.28964788899975247,
+        "tn_time_s": 0.04455956023372387,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 16,
+        "bond_dim": 8,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.28964788899975247,
+        "tn_time_s": 0.04455956023372387,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 16,
+        "bond_dim": 16,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.28964788899975247,
+        "tn_time_s": 0.04455956023372387,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 16,
+        "bond_dim": 32,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.28964788899975247,
+        "tn_time_s": 0.04455956023372387,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 24,
+        "bond_dim": 2,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.2967020430005505,
+        "tn_time_s": 0.03666718252925936,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 24,
+        "bond_dim": 4,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.2967020430005505,
+        "tn_time_s": 0.03666718252925936,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 24,
+        "bond_dim": 8,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.2967020430005505,
+        "tn_time_s": 0.03666718252925936,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 24,
+        "bond_dim": 16,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.2967020430005505,
+        "tn_time_s": 0.03666718252925936,
+        "tn_faster": true
+      },
+      {
+        "n_requests": 24,
+        "bond_dim": 32,
+        "threshold": 0.9,
+        "metropolis_time_s": 0.2967020430005505,
+        "tn_time_s": 0.03666718252925936,
+        "tn_faster": true
+      }
+    ]
+  }
+}
