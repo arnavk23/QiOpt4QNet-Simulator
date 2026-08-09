@@ -1,0 +1,6 @@
+failure_prob,worst_util_gain,nominal_util_loss,nominal_worst_util,robust_worst_util
+0.1,40.5,45.0,69.5,110.0
+0.3,40.5,45.0,69.5,110.0
+0.5,40.5,45.0,69.5,110.0
+0.7,40.5,45.0,69.5,110.0
+0.9,40.5,45.0,69.5,110.0

@@ -198,6 +198,41 @@ encoder (GraphSAGE/GAT) over network structure eventually — swap it in for
 `feasibility_aware_decode` only needs a `{(request_id, bundle_id): score}`
 mapping regardless of how the scores were produced.
 
+## Extensions and the experiment suite
+
+Beyond the core solver layers, `src/extensions/` and `src/routing/` +
+`src/optimization/` hold paper-style extensions that plug into the same
+bundle interface:
+
+| Module | Extension |
+|---|---|
+| `extensions/adaptive_qubo.py` | Adaptive candidate reduction: keep the top-`k` bundles per request (by fidelity/congestion filters) before building and annealing the QUBO, then compare against the full-size reference QUBO |
+| `extensions/hybrid_pipeline.py` | Hybrid pipeline: candidate reduction → small QUBO solve → feasibility repair/refine, benchmarked against QUBO-only ablations |
+| `extensions/multi_objective.py` | Multi-objective selection: throughput/fidelity/success/latency/memory trade-offs via Pareto-frontier enumeration and `ε`-constraint queries |
+| `extensions/disjoint_paths.py` | `k`-disjoint-path provisioning: composite bundles over edge-disjoint routes with success-probability redundancy |
+| `extensions/swapping_order.py` | Entanglement-swap-tree ordering (linear / balanced / optimal) under T1/T2 memory decay and fidelity-vs-`τ_mem` sweeps |
+| `extensions/topologies.py` | Generative topology families (ring, random-geometric, Erdős–Rényi, Watts–Strogatz, Barabási–Albert) to test solver robustness to network shape |
+| `routing/temporal_request.py`, `routing/memory_scheduler.py` | Time-aware requests (arrival/deadline/priority) and a temporal memory scheduler with fidelity decay and T1/T2 windows |
+| `optimization/joint_scheduler.py`, `optimization/online_optimizers.py` | Joint routing + temporal-memory scheduling vs memory-agnostic baselines; static / online / receding-horizon regimes |
+| `baselines/gnn_ranker.py` | GraphSAGE candidate ranker that scores bundles from graph features and feeds a feasibility-aware greedy / QUBO decode |
+
+**Run the full experiment battery** (writes ~33 CSVs to `results/experiments/`):
+
+```bash
+PYTHONPATH=src python3 src/experiments/experiment_suite.py
+```
+
+**Regenerate all figures and summary tables** (writes PNGs + `summary_tables.txt`
+to `results/experiments/figures/`):
+
+```bash
+PYTHONPATH=src python3 src/experiments/plot_results.py
+```
+
+Each `extensions/` module and the temporal/joint scheduling stack is covered
+by unit tests under `tests/` (`test_extensions_*.py`, `test_joint_scheduling.py`,
+`test_adaptive_qubo.py`, `test_hybrid_pipeline.py`, `test_gnn_ranker.py`).
+
 ## Physics notes
 
 - Fidelities are modeled as Werner-state parameters. Entanglement swapping

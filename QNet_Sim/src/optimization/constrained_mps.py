@@ -295,7 +295,7 @@ class ConstrainedTensorNetworkOptimizer:
         u = u[:, :k]
         s = s[:k]
         vh = vh[:k, :]
-        tl_new = u.reshape(dl, chi_l, k)
+        tl_new = (u * s).reshape(dl, chi_l, k)
         tr_new = vh.reshape(k, dr, chi_r).transpose(1, 0, 2)
         mps[left] = tl_new
         mps[right] = tr_new

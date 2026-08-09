@@ -1,11 +1,11 @@
-import sys, os, csv, math, time
+import sys, os, csv, math, time, random
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import dimod
 
 from experiments.instances import (
     generate_chain_topology, generate_grid_topology,
-    contention_sweep_instances,
+    generate_benchmark_instance, contention_sweep_instances,
 )
 from experiments.metrics import ExperimentTracker
 from experiments.benchmark import build_metropolis, build_tensor_network
@@ -333,6 +333,395 @@ def _u_sum(bundles, selected):
     return sum(util_of.get(k, 0.0) for k in selected)
 
 
+def run_selfish_routing_experiments():
+    """Extension 1 (D1): congestion games, price of anarchy and tolls.
+
+    Two classes of experiments: (a) the atomic Pigou network, where a shared
+    bottleneck produces pure-Nash equilibria whose social cost exceeds the
+    optimum (PoA -> 4/3 as the number of players grows), and marginal-cost
+    tolls recover the optimum; (b) Braess's paradox in the Wardrop
+    (splittable-flow) model, where adding a zero-cost shortcut *raises* the
+    equilibrium latency from 1.5 to 2.0 and tolls restore 1.5.
+    """
+    from extensions.selfish_routing import (
+        braess_capacity_sweep, braess_marginal_toll_sweep,
+        braess_toll_sweep, pigou_instance, pigou_poa_sweep, toll_sweep,
+    )
+
+    def _write(rows, name):
+        path = os.path.join(OUT, name)
+        with open(path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        print(f"Wrote {len(rows)} rows to {path}")
+
+    _write(pigou_poa_sweep(), "selfish_routing_pigou_poa.csv")
+
+    bundles, caps, ov = pigou_instance(n_players=3)
+    _write(toll_sweep(bundles, caps, demand_model="unit",
+                      beta_override=ov["beta"], base_override=ov["base"]),
+           "selfish_routing_pigou_toll.csv")
+
+    _write(braess_capacity_sweep(), "selfish_routing_braess_capacity.csv")
+    _write(braess_toll_sweep(), "selfish_routing_braess_toll.csv")
+    _write(braess_marginal_toll_sweep(), "selfish_routing_braess_wardrop_toll.csv")
+
+
+def _fragile_bottleneck_bundles():
+    bottleneck = tuple(sorted(("S", "B")))
+
+    def mk(rid, bid, edges, util):
+        return {"bundle_id": bid, "request_id": rid, "path": list(edges),
+                "edge_demands": {tuple(sorted(e)): 1 for e in edges},
+                "memory_demands": {}, "utility": util}
+
+    bundles = [
+        mk("R1", "high", [("S", "B"), ("B", "T1")], 100.0),
+        mk("R1", "safe", [("S", "T1")], 60.0),
+        mk("R2", "high", [("S", "B"), ("B", "T2")], 95.0),
+        mk("R2", "safe", [("S", "T2")], 50.0),
+    ]
+    caps = {bottleneck: 1.0,
+            tuple(sorted(("B", "T1"))): 10.0, tuple(sorted(("B", "T2"))): 10.0,
+            tuple(sorted(("S", "T1"))): 10.0, tuple(sorted(("S", "T2"))): 10.0}
+    mem = {"S": 100.0, "B": 100.0, "T1": 100.0, "T2": 100.0}
+    return bundles, caps, mem
+
+
+def _fragile_scenarios(bundles, failure_prob, severity, n_scenarios, seed):
+    bottleneck = tuple(sorted(("S", "B")))
+    rng = random.Random(seed)
+    scenarios = []
+    for _ in range(n_scenarios):
+        fail = rng.random() < failure_prob
+        s = {}
+        for b in bundles:
+            u = b["utility"]
+            if fail and bottleneck in b["edge_demands"]:
+                u *= (1.0 - severity)
+            s[(b["request_id"], b["bundle_id"])] = u
+        scenarios.append(s)
+    return scenarios
+
+
+def run_robust_routing_experiments():
+    """Extension 2 (D2): robust routing under uncertain utilities.
+
+    (a) On a fragile bottleneck, the nominal router maximises expected utility
+    but lands in a poor worst case; the maximin router (gamma=1) raises the
+    worst-case utility at a price in nominal utility (the price of robustness);
+    a min-max-regret router trades between the two.  (b) We sweep the failure
+    probability to show the robustness gain grows with uncertainty, and (c)
+    compare nominal vs robust on ordinary chain instances under random noise.
+    """
+    import random as _random
+    from extensions.robust_routing import (
+        RobustRoutingModel, generate_scenarios,
+    )
+
+    def _write(rows, name):
+        path = os.path.join(OUT, name)
+        with open(path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        print(f"Wrote {len(rows)} rows to {path}")
+
+    kw = dict(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+              max_iterations=5000, n_restarts=3, steps_per_temperature=10)
+
+    # (a) Decision-criterion comparison on the fragile bottleneck (exact).
+    bundles, caps, mem = _fragile_bottleneck_bundles()
+    scenarios = _fragile_scenarios(bundles, failure_prob=0.6, severity=0.9,
+                                   n_scenarios=12, seed=3)
+    model = RobustRoutingModel(bundles, caps, mem, scenarios, seed=42)
+    criterion_rows = []
+    for label, sel in [("nominal", model.solve_exact(0.0)),
+                       ("maximin", model.solve_exact(1.0)),
+                       ("min-max-regret", model.solve_exact_regret())]:
+        ev = model.evaluate(sel)
+        reg = model.regret(sel, exact=True)
+        criterion_rows.append({
+            "criterion": label,
+            "nominal_util": ev["nominal_util"],
+            "worst_util": ev["worst_util"],
+            "mean_util": ev["mean_util"],
+            "max_regret": reg["max_regret"],
+            "mean_regret": reg["mean_regret"],
+        })
+    _write(criterion_rows, "robust_routing_criteria.csv")
+
+    # (b) Uncertainty sweep: robustness gain vs failure probability.
+    noise_rows = []
+    for failure_prob in [0.1, 0.3, 0.5, 0.7, 0.9]:
+        s = _fragile_scenarios(bundles, failure_prob, severity=0.9,
+                               n_scenarios=12, seed=3)
+        m = RobustRoutingModel(bundles, caps, mem, s, seed=42)
+        g = m.robustness_gain(exact=True)
+        noise_rows.append({
+            "failure_prob": failure_prob,
+            "worst_util_gain": g["worst_util_gain"],
+            "nominal_util_loss": g["nominal_util_loss"],
+            "nominal_worst_util": g["nominal_worst_util"],
+            "robust_worst_util": g["robust_worst_util"],
+        })
+    _write(noise_rows, "robust_routing_uncertainty_sweep.csv")
+
+    # (c) Pareto sweep on the fragile bottleneck (gamma sweep).
+    _write(model.pareto_sweep(gammas=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0], exact=True),
+           "robust_routing_pareto.csv")
+
+    # (d) Chain-instance comparison under random noise.
+    instance_rows = []
+    for n_req in [4, 6, 8]:
+        topo = generate_chain_topology(n_nodes=8, edge_capacity=6, memory_capacity=10)
+        rng = _random.Random(42)
+        pairs = []
+        for _ in range(n_req):
+            src, dst = rng.sample(topo["nodes"], 2)
+            pairs.append((src, dst, rng.uniform(10, 100), rng.uniform(0.5, 0.8)))
+        b2, ec2, mc2 = generate_benchmark_instance(topo, pairs, rng)
+        scen = generate_scenarios(b2, n_scenarios=8, noise_scale=0.25,
+                                  failure_prob=0.3, seed=7)
+        m2 = RobustRoutingModel(b2, ec2, mc2, scen, seed=42)
+        ev_n = m2.evaluate(m2.solve(0.0, **kw))
+        ev_r = m2.evaluate(m2.solve(1.0, **kw))
+        instance_rows.append({
+            "n_requests": n_req,
+            "n_bundles": len(b2),
+            "nominal_util": ev_n["nominal_util"],
+            "nominal_worst": ev_n["worst_util"],
+            "robust_util": ev_r["nominal_util"],
+            "robust_worst": ev_r["worst_util"],
+            "worst_util_gain": ev_r["worst_util"] - ev_n["worst_util"],
+            "nominal_util_loss": ev_n["nominal_util"] - ev_r["nominal_util"],
+        })
+    _write(instance_rows, "robust_routing_instances.csv")
+
+
+def _write_rows(rows, name):
+    path = os.path.join(OUT, name)
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+    print(f"Wrote {len(rows)} rows to {path}")
+
+
+def run_joint_scheduling_experiments():
+    """Extension 1 (E1): joint routing + temporal memory scheduling vs the
+    memory-agnostic aggregate-slot router, plus the three control regimes
+    (static / online / receding-horizon, E3) on identical arrival traces."""
+    from optimization.joint_scheduler import run_joint_comparison
+    from optimization.online_optimizers import run_regime_comparison
+
+    topo_fn = lambda: generate_chain_topology(n_nodes=10, edge_capacity=8,
+                                              memory_capacity=12,
+                                              raw_fidelity=0.85)
+    rows = []
+    for mean_rate in [1.0, 1.8]:
+        for tau_mem in [3.0, 8.0]:
+            res = run_joint_comparison(topo_fn, n_slots=12, mean_rate=mean_rate,
+                                       tau_mem=tau_mem, seed=42)
+            for label in ("joint", "memory_agnostic"):
+                rows.append({"mean_rate": mean_rate, "tau_mem": tau_mem,
+                             "regime": label,
+                             **res["trace"], **res[label]})
+    _write_rows(rows, "joint_scheduling_comparison.csv")
+
+    regime_rows = []
+    for mean_rate in [0.8, 1.5]:
+        res = run_regime_comparison(topo_fn, n_slots=10, mean_rate=mean_rate,
+                                    tau_mem=5.0, window_size=3, seed=42)
+        for r in res["rows"]:
+            regime_rows.append({"mean_rate": mean_rate, "n_requests": res["n_requests"],
+                                **r})
+    _write_rows(regime_rows, "online_regimes_comparison.csv")
+
+
+def run_adaptive_qubo_experiments():
+    """Extension 7 (E7): adaptive candidate reduction for the QUBO."""
+    from optimization.adaptive_qubo import run_topk_sweep
+
+    rows = []
+    for name, topo_fn in [("chain_10", lambda: generate_chain_topology(
+                              n_nodes=10, edge_capacity=6, memory_capacity=10)),
+                          ("grid_6x6", lambda: generate_grid_topology(
+                              rows=6, cols=6, edge_capacity=6,
+                              memory_capacity=10))]:
+        res = run_topk_sweep(topo_fn, n_requests=12, num_reads=20, seed=42)
+        for r in res["rows"]:
+            rows.append({"topology": name, "n_bundles_in": res["n_bundles"],
+                         **r})
+    _write_rows(rows, "adaptive_qubo_topk.csv")
+
+
+def run_hybrid_pipeline_experiments():
+    """Extension 6 (E6): four-stage hybrid pipeline vs its ablations."""
+    from optimization.hybrid_pipeline import run_hybrid_comparison
+
+    rows = []
+    for n_requests in [6, 12]:
+        topo_fn = lambda: generate_chain_topology(n_nodes=8, edge_capacity=6,
+                                                  memory_capacity=10)
+        res = run_hybrid_comparison(topo_fn, n_requests=n_requests, seed=42)
+        for stage, d in [("full_pipeline", res["full_pipeline"]),
+                         ("qubo_only", res["qubo_only"]),
+                         ("qubo_plus_repair", res["qubo_plus_repair"])]:
+            rows.append({"n_requests": n_requests,
+                         "n_bundles_in": res["n_bundles_in"],
+                         "n_bundles_reduced": res["n_bundles_reduced"],
+                         "stage": stage,
+                         "utility": d["utility"],
+                         "served": d["served"]})
+    _write_rows(rows, "hybrid_pipeline_comparison.csv")
+
+
+def run_gnn_experiments():
+    """Extension 8 (E8): GNN-guided candidate reduction vs adaptive top-k and
+    the full-candidate QUBO reference."""
+    import random as _random
+    from baselines.gnn_ranker import gnn_guided_qubo
+    from optimization.adaptive_qubo import adaptive_qubo_solve, reference_solution
+    from experiments.instances import generate_benchmark_instance
+
+    rows = []
+    for name, topo in [("chain_10", generate_chain_topology(
+                           n_nodes=10, edge_capacity=6, memory_capacity=10)),
+                       ("grid_5x5", generate_grid_topology(
+                           rows=5, cols=5, edge_capacity=6,
+                           memory_capacity=10))]:
+        rng = _random.Random(7)
+        pairs = []
+        for _ in range(10):
+            src, dst = rng.sample(topo["nodes"], 2)
+            pairs.append((src, dst, rng.uniform(10, 100), rng.uniform(0.5, 0.8)))
+        b, ec, mc = generate_benchmark_instance(topo, pairs, rng)
+
+        ref = reference_solution(b, ec, mc, num_reads=20, seed=42)
+        adap = adaptive_qubo_solve(b, ec, mc, k=8, num_reads=20, seed=42)
+        gnn = gnn_guided_qubo(topo, b, ec, mc, k=8, num_reads=20, seed=42)
+        for label, r in [("full_qubo", ref), ("adaptive_topk", adap),
+                         ("gnn_guided", gnn)]:
+            rows.append({"topology": name, "method": label,
+                         "n_bundles_in": len(b),
+                         "n_bundles_in_qubo": r.get("n_bundles_reduced",
+                                                    r.get("n_bundles_in_qubo", len(b))),
+                         "utility": r["utility"],
+                         "served": r["served"],
+                         "n_qubo_variables": r.get("n_qubo_variables", ""),
+                         "wall_time_s": r.get("wall_time_s", r.get("gnn_training_loss", ""))})
+    _write_rows(rows, "gnn_candidate_reduction.csv")
+
+
+def run_multi_objective_experiments():
+    """Extension 9 (E9): Pareto frontiers and constraint queries."""
+    import random as _random
+    from extensions.multi_objective import (
+        pareto_frontier, constraint_frontier, selection_objectives,
+    )
+    from experiments.instances import generate_benchmark_instance
+
+    rng = _random.Random(3)
+    topo = generate_grid_topology(rows=3, cols=3, edge_capacity=6,
+                                  memory_capacity=10)
+    pairs = []
+    for _ in range(5):
+        src, dst = rng.sample(topo["nodes"], 2)
+        pairs.append((src, dst, rng.uniform(10, 100), rng.uniform(0.4, 0.7)))
+    b, ec, mc = generate_benchmark_instance(topo, pairs, rng)
+
+    front = pareto_frontier(b, ec, mc, max_combos=20000)
+    front_rows = []
+    for i, p in enumerate(front):
+        front_rows.append({"frontier_index": i,
+                           "throughput": p["objectives"]["throughput"],
+                           "fidelity": p["objectives"]["fidelity"],
+                           "latency": p["objectives"]["latency"],
+                           "memory": p["objectives"]["memory"]})
+    _write_rows(front_rows, "multi_objective_frontier.csv")
+
+    targets = [0.4, 0.5, 0.6, 0.7]
+    rows = []
+    for constrain, maximize in [("fidelity", "throughput"),
+                                ("throughput", "fidelity")]:
+        for r in constraint_frontier(b, ec, mc, targets, constrain=constrain,
+                                     maximize=maximize, max_combos=20000):
+            rows.append({"constrain": constrain, "maximize": maximize,
+                         "target": r["target"], "feasible": r["feasible"],
+                         "achieved_constraint": r.get(constrain),
+                         "achieved_maximized": r.get(maximize)})
+    _write_rows(rows, "multi_objective_constraint.csv")
+
+
+def run_disjoint_paths_experiments():
+    """Extension 11 (E11): k-disjoint path provisioning."""
+    from extensions.disjoint_paths import run_disjoint_comparison
+
+    topo = generate_grid_topology(rows=3, cols=4, edge_capacity=4,
+                                  memory_capacity=12)
+    rows = []
+    for n_requests in [4, 8]:
+        res = run_disjoint_comparison(topo, n_requests=n_requests,
+                                      n_expected_disjoint=2, seed=42)
+        for r in res["rows"]:
+            rows.append({"n_requests": n_requests,
+                         "n_bundles_single": res["n_bundles_single"],
+                         "n_bundles_multipath": res["n_bundles_multipath"],
+                         "n_multipath_selected": res["n_multipath_selected"],
+                         **r})
+    _write_rows(rows, "disjoint_paths_comparison.csv")
+
+
+def run_swapping_order_experiments():
+    """Extension 17 (E17): swapping-strategy order effects."""
+    from extensions.swapping_order import (
+        run_swapping_order_sweep, run_path_fidelity_sweep,
+        run_swapping_bundle_comparison,
+    )
+
+    _write_rows(run_swapping_order_sweep(path_lengths=[3, 4, 5, 6, 7, 8],
+                                         n_trials=40, seed=42),
+                "swapping_order_sweep.csv")
+    _write_rows(run_path_fidelity_sweep(path_length=10, link_fidelity=0.85),
+                "swapping_path_fidelity.csv")
+
+    topo = generate_chain_topology(n_nodes=12, edge_capacity=6,
+                                   memory_capacity=10, raw_fidelity=0.85)
+    rows = []
+    res = run_swapping_bundle_comparison(topo, n_requests=8, tau_mem=3.0,
+                                         seed=42)
+    for r in res["rows"]:
+        rows.append({**r})
+    _write_rows(rows, "swapping_bundle_comparison.csv")
+
+
+def run_topology_evolution_experiments():
+    """Extension 13 (E13): does the optimizer advantage survive topology
+    shape changes?  Matched-size, matched-density families."""
+    from extensions.topologies import (
+        generate_ring_topology, generate_random_geometric_topology,
+        generate_erdos_renyi_topology, generate_watts_strogatz_topology,
+        generate_barabasi_albert_topology, topology_sweep,
+    )
+
+    topo_fns = {
+        "chain": lambda: generate_chain_topology(n_nodes=12, edge_capacity=6,
+                                                 memory_capacity=10),
+        "ring": lambda: generate_ring_topology(n_nodes=12),
+        "random_geometric": lambda: generate_random_geometric_topology(
+            n_nodes=12, radius=0.35),
+        "erdos_renyi": lambda: generate_erdos_renyi_topology(n_nodes=12, p=0.22),
+        "watts_strogatz": lambda: generate_watts_strogatz_topology(n_nodes=12),
+        "barabasi_albert": lambda: generate_barabasi_albert_topology(n_nodes=12),
+    }
+    rows = []
+    for n_requests in [4, 8]:
+        rows.extend(topology_sweep(topo_fns, n_requests=n_requests, seed=42))
+    _write_rows(rows, "topology_evolution.csv")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("  Paper experiment sweep")
@@ -352,6 +741,36 @@ if __name__ == "__main__":
 
     print("\n5. Hamiltonian encoding comparison (slack vs direct)...")
     run_hamiltonian_encoding_comparison()
+
+    print("\n6. Selfish routing (D1): Pigou PoA + Braess paradox...")
+    run_selfish_routing_experiments()
+
+    print("\n7. Robust routing (D2): nominal vs maximin vs min-max-regret...")
+    run_robust_routing_experiments()
+
+    print("\n8. Joint scheduling (E1): routing + temporal memory vs memory-agnostic...")
+    run_joint_scheduling_experiments()
+
+    print("\n9. Adaptive QUBO (E7): candidate-space reduction top-k sweep...")
+    run_adaptive_qubo_experiments()
+
+    print("\n10. Hybrid pipeline (E6): full pipeline vs ablations...")
+    run_hybrid_pipeline_experiments()
+
+    print("\n11. GNN-guided reduction (E8): GNN vs adaptive top-k vs full QUBO...")
+    run_gnn_experiments()
+
+    print("\n12. Multi-objective (E9): Pareto frontier + constraint queries...")
+    run_multi_objective_experiments()
+
+    print("\n13. k-disjoint paths (E11): single vs multipath provisioning...")
+    run_disjoint_paths_experiments()
+
+    print("\n14. Swapping-order (E17): depth / coherence / concurrency...")
+    run_swapping_order_experiments()
+
+    print("\n15. Topology evolution (E13): chain vs ring vs G(n,p) vs small-world vs scale-free...")
+    run_topology_evolution_experiments()
 
     print(f"\nAll results in {OUT}/")
 

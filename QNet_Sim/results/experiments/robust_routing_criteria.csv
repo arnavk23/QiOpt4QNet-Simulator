@@ -1,0 +1,4 @@
+criterion,nominal_util,worst_util,mean_util,max_regret,mean_regret
+nominal,155.0,69.5,98.0,40.5,27.0
+maximin,110.0,110.0,110.0,45.0,15.0
+min-max-regret,155.0,69.5,98.0,40.5,27.0
