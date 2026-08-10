@@ -871,6 +871,29 @@ def run_quantum_annealing_experiments():
     _write_rows(res["rows"], "quantum_annealing_sweep.csv")
 
 
+def run_chance_constrained_experiments():
+    """Wave 3: SLA-calibration frontier of chance-constrained routing.
+
+    Deterministic fidelity constraints implicitly tolerate up to ~1/2
+    violation probability for razor-margin bundles; quantile (chance)
+    constraints F >= F_min + z_eps*sigma deliver the requested reliability
+    at a utility price, and eps > 1/2 trades reliability for capacity.
+    Each policy is solved by exact ILP and executed in the discrete-event
+    engine with matching fidelity noise."""
+    from optimization.chance_constrained import run_chance_constrained_study
+
+    topo_fn = lambda: generate_chain_topology(n_nodes=8, edge_capacity=6,
+                                              memory_capacity=10,
+                                              raw_fidelity=0.85,
+                                              generation_prob=0.8)
+    res = run_chance_constrained_study(
+        topo_fn, n_requests_list=[6, 10],
+        eps_list=[0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8],
+        sigma_list=[0.03, 0.05], n_instances=3, n_realizations=40,
+        time_limit=30.0, seed=42)
+    _write_rows(res["rows"], "chance_constrained.csv")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("  Paper experiment sweep")
@@ -938,6 +961,9 @@ if __name__ == "__main__":
 
     print("\n21. Quantum annealing backend (Wave 3): embedded QA vs SA/SQA...")
     run_quantum_annealing_experiments()
+
+    print("\n22. Chance-constrained routing (Wave 3): SLA-calibration frontier...")
+    run_chance_constrained_experiments()
 
     print(f"\nAll results in {OUT}/")
 

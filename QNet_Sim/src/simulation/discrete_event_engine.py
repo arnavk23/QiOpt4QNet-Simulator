@@ -111,6 +111,7 @@ class StochasticEventSimulator:
                  swap_time: float = 1.0,
                  max_generation_attempts: int = 200,
                  allow_generation_retries: bool = True,
+                 fidelity_noise_sigma: Optional[float] = None,
                  seed: int = 42):
         self.topology = topology
         self.tau_mem = tau_mem
@@ -120,6 +121,7 @@ class StochasticEventSimulator:
         self.swap_time = swap_time
         self.max_generation_attempts = max_generation_attempts
         self.allow_generation_retries = allow_generation_retries
+        self.fidelity_noise_sigma = fidelity_noise_sigma
         self.seed = seed
         self._link_params = topology["link_params"]
 
@@ -218,7 +220,7 @@ class StochasticEventSimulator:
 
             while not st["done"]:
                 if cursor >= len(tasks):
-                    self._deliver(rid, st, t, delivered, outcomes, occupancy)
+                    self._deliver(rid, st, t, delivered, outcomes, occupancy, rng)
                     break
                 kind, payload = tasks[cursor]
                 if kind == "gen":
@@ -341,9 +343,15 @@ class StochasticEventSimulator:
         failures.append((rid, cause))
         outcomes[rid] = f"failed:{cause}"
 
-    def _deliver(self, rid, st, t, delivered, outcomes, occupancy):
+    def _deliver(self, rid, st, t, delivered, outcomes, occupancy, rng=None):
         pair = st["link_pairs"][0]
         fid = self._decayed(pair, t)
+        if self.fidelity_noise_sigma:
+            from optimization.chance_constrained import sample_truncnorm
+            if rng is None:
+                rng = random.Random(self.seed * 100000 + 999999)
+            fid = sample_truncnorm(fid, self.fidelity_noise_sigma, rng,
+                                   lo=0.0, hi=1.0)
         b = st["bundle"]
         self._release_all(st, occupancy)
         st["done"] = True

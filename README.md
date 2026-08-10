@@ -221,8 +221,9 @@ bundle interface:
 | `experiments/optimality_benchmark.py` | Exact-ILP optimality-gap certification and parametric-vs-sampled stochastic reliability benchmarks |
 | `optimization/adaptive_budget.py` | Congestion/density-driven adaptive QUBO candidate budget vs fixed top-k and full-candidate baselines |
 | `optimization/quantum_annealing_backend.py` | Quantum-annealing backend: minor-embedding onto a hardware lattice, PIA sampler with chain-break-aware decode, compared against SA/SQA |
+| `optimization/chance_constrained.py` | Chance-constrained routing: replaces the hard rule `F ≥ F_min` with the quantile constraint `P(F_r ≥ F_min) ≥ 1-ε` under truncated-normal fidelity noise; hard, chance(ε), and nominal policies solved by exact ILP and executed in the DES engine to certify that the empirical SLA stays ≤ ε |
 
-**Run the full experiment battery** (writes ~41 CSVs to `results/experiments/`):
+**Run the full experiment battery** (writes ~42 CSVs to `results/experiments/`):
 
 ```bash
 PYTHONPATH=src python3 src/experiments/experiment_suite.py
@@ -240,7 +241,8 @@ by unit tests under `tests/` (`test_extensions_*.py`, `test_joint_scheduling.py`
 `test_adaptive_qubo.py`, `test_hybrid_pipeline.py`, `test_gnn_ranker.py`,
 `test_discrete_event_simulation.py`, `test_recourse.py`,
 `test_purification_scheduler.py`, `test_optimality_benchmark.py`,
-`test_adaptive_budget.py`, `test_quantum_annealing_backend.py`).
+`test_adaptive_budget.py`, `test_quantum_annealing_backend.py`,
+`test_chance_constrained.py`).
 
 ## Physics notes
 

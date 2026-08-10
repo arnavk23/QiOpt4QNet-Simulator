@@ -1306,6 +1306,56 @@ def fig_quantum_annealing():
     print(f"Saved {path}")
 
 
+def fig_chance_constrained():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "chance_constrained.csv"))
+    groups = sorted({(int(r["n_requests"]), float(r["sigma"])) for r in rows})
+    eps_all = sorted({float(r["eps"]) for r in rows if r["policy"] == "chance"})
+    colors = plt.cm.viridis(np.linspace(0.1, 0.9, len(groups)))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    for i, (n, sig) in enumerate(groups):
+        ch = [r for r in rows if r["policy"] == "chance"
+              and int(r["n_requests"]) == n and float(r["sigma"]) == sig]
+        hard = [r for r in rows if r["policy"] == "hard"
+                and int(r["n_requests"]) == n and float(r["sigma"]) == sig]
+        nom = [r for r in rows if r["policy"] == "nominal"
+               and int(r["n_requests"]) == n and float(r["sigma"]) == sig]
+        eps = [float(r["eps"]) for r in ch]
+        sla = [sum(float(r["sla_violation_prob"]) for r in ch)
+               / max(len(ch), 1)] * len(eps)
+        eU = [sum(float(r["e_utility"]) for r in ch) / max(len(ch), 1)] * len(eps)
+        label = f"N={n}, $\\sigma$={sig}"
+        ax1.plot(eps, sla, "o-", color=colors[i], label=label, markersize=5)
+        ax2.plot(eps, eU, "o-", color=colors[i], label=label, markersize=5)
+        if hard:
+            h_sla = sum(float(r["sla_violation_prob"]) for r in hard) / len(hard)
+            h_u = sum(float(r["e_utility"]) for r in hard) / len(hard)
+            ax1.axhline(h_sla, color=colors[i], ls=":", lw=1, alpha=0.7)
+            ax2.axhline(h_u, color=colors[i], ls=":", lw=1, alpha=0.7)
+    ax1.plot([0, 1], [0, 1], "k--", lw=0.8, label="y = eps (calibrated)")
+    ax1.set_xlabel("Requested violation bound $\\epsilon$")
+    ax1.set_ylabel("Empirical SLA violation probability")
+    ax1.set_title("Chance constraint calibration (dotted: hard)")
+    ax1.set_xlim(0, 1)
+    ax1.set_ylim(0, 1)
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3)
+
+    ax2.set_xlabel("Requested violation bound $\\epsilon$")
+    ax2.set_ylabel("Expected utility E[U] (dotted: hard)")
+    ax2.set_title("Utility price of the reliability guarantee")
+    ax2.set_xlim(0, 1)
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(OUT, "chance_constrained.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
 if __name__ == "__main__":
     print("Generating figures...")
     fig_contention_scaling()
@@ -1336,6 +1386,7 @@ if __name__ == "__main__":
     fig_optimality_gap()
     fig_adaptive_budget()
     fig_quantum_annealing()
+    fig_chance_constrained()
     print("\nGenerating tables...")
     generate_tables()
     print(f"\nAll outputs in {OUT}/")
