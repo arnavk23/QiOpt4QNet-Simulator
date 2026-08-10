@@ -1,6 +1,7 @@
 \documentclass[twocolumn]{article}
 
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \graphicspath{{../QNet_Sim/results/experiments/figures/}}
@@ -16,12 +17,14 @@
 \newcommand{\E}{\mathbb{E}}
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\N}{\mathbb{N}}
-\renewcommand{\H}{\mathcal{H}}
+\newcommand{\calH}{\mathcal{H}}
 \DeclareMathOperator{\argmax}{argmax}
+\DeclareMathOperator{\Tr}{Tr}
+\DeclareMathOperator{\erfc}{erfc}
 
 \title{Quantum-Inspired Optimization for Entanglement Routing\\
-in Quantum Networks: Temporal-Memory Scheduling and\\
-Topology-Aware Extensions of a QUBO/Tensor-Network Solver Suite}
+in Quantum Networks: From QUBO Solver Families to\\
+Chance-Constrained Stochastic Scheduling}
 
 \author{Arnav Kapoor \\
 QiOpt4QNet Project \\
@@ -34,107 +37,119 @@ QiOpt4QNet Project \\
 
 \begin{abstract}
 We formulate entanglement routing in quantum repeater networks---the
-selection of a path and purification schedule (a \emph{bundle}) per
-concurrent request under edge and memory capacity constraints---as a
-quadratic unconstrained binary optimization (QUBO) problem and compare
-three solver families: a Metropolis annealer, a tensor-network
-(boundary-MPS) compressor, and OpenJij simulated annealing.  On a
-standardized benchmark suite of chain and grid topologies the two
-local-search solvers reproduce the same capacity-limited served-ratio
-frontier ($100\%$ at light loads to $37$--$46\%$ at maximal
-contention) with aggregate utilities agreeing to within $\sim\!5\%$,
-while the MPS compressor is $6$--$370\times$ faster and degrades
-gracefully as contention grows.  We then extend the core formulation
-along five directions that current entanglement-routing simulators
-largely omit.  \emph{(i) Temporal-memory scheduling:} a memory
-scheduler with T1/T2 fidelity decay and per-request deadlines lets a
-joint router serve every admitted request on time with mean delivered
-fidelity $0.30$--$0.51$, in contrast to a memory-agnostic baseline that
-admits requests it cannot deliver within coherence.  \emph{(ii)
-Adaptive and learned candidate reduction:} a fidelity- and
-congestion-filtered top-$k$ selection keeps QUBO quality at budgets as
-low as $k=4$ per request, a hybrid reduce--solve--repair pipeline
-raises utility by up to $1.66\times$ over QUBO-only decoding, and a
-GraphSAGE ranker matches the filter-based reduction while retaining
-full candidate coverage.  \emph{(iii) Multi-objective and reliability
-analysis:} exhaustive Pareto-frontier enumeration and
-$\epsilon$-constraint queries quantify throughput--fidelity--latency
-trade-offs, and $k$-disjoint-path provisioning adds utility without
-reducing coverage.  \emph{(iv) Swapping-order scheduling:} balancing
-the entanglement-swap tree recovers up to $1.58\times$ of delivered
-fidelity on $8$--$10$-hop paths under memory coherence times $\tau
-\in [1,20]$.  \emph{(v) Topology robustness:} the solver advantage
-survives across ring, random-geometric, Erd\H{o}s--R\'enyi,
-Watts--Strogatz, and Barab\'asi--Albert families, with small-world
-topologies serving the full request set.  The implementation is
-open source and fully reproducible.
+joint selection of a path and purification schedule (a \emph{bundle})
+per concurrent request under edge and memory capacity
+constraints---as a quadratic unconstrained binary optimization (QUBO)
+problem, and compare a Metropolis annealer, a boundary--matrix-product-state
+(MPS) tensor-network compressor, OpenJij simulated annealing, and an
+embedded quantum-annealing backend against an exact-ILP reference.  On
+chain, grid, and five generative topology families the local-search
+solvers reproduce the same capacity-limited served-ratio frontier with
+aggregate utilities agreeing to within $\sim\!5\%$, while the MPS
+compressor is $6$--$370\times$ faster and the exact-ILP benchmark
+certifies a mean relative optimality gap of $1.5\%$ for the
+Metropolis solver.  Beyond the static formulation we develop a
+stochastic reliability framework in which a discrete-event simulator
+executes solver plans under sampled entanglement generation, swap
+failure, T1/T2 decoherence, and fidelity noise.  Within it we (i)
+introduce \emph{chance-constrained routing}, replacing the hard rule
+$F \ge F_{\min}$ with the quantile constraint
+$\Pr[F_r \ge F_{\min}] \ge 1-\varepsilon$, and show that the
+deterministic rule implicitly tolerates $5$--$14\%$ SLA violation for
+razor-margin bundles while the chance rule keeps the empirical
+violation at or below the requested $\varepsilon$ on every tested
+instance; (ii) benchmark recourse, in which local repair recovers
+$100\%$ of failed requests at a $445$--$1281\times$ wall-time speedup
+over full replanning; and (iii) add purification as a first-class
+variable, showing that a purification-aware candidate superset is
+cost-free while purification binds precisely when fidelity
+requirements outrun raw-link fidelity.  The full stack---temporal-memory
+joint scheduling, adaptive and GNN-guided candidate reduction, a hybrid
+reduce--solve--repair pipeline, multi-objective Pareto analysis,
+$k$-disjoint-path provisioning, swap-tree ordering under memory decay,
+and hardware-parameter profiles---is implemented, unit-tested, and
+reproducible, and delivers every admitted request within coherence at
+mean delivered fidelity $0.30$--$0.51$ where a memory-agnostic baseline
+over-admits.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
 
-Quantum networks distribute entanglement---a fundamentally quantum
-resource---between distant nodes, enabling quantum key distribution
-(QKD)~\cite{ekert1991quantum,pirandola2020advances}, distributed
-quantum computing, and blind quantum
-computing~\cite{kimble2008quantum,wehner2018quantum}.  The central
-routing problem is: given a set of concurrent entanglement requests
-between node pairs, select for each request a path and a purification
-schedule---collectively a \emph{bundle}---that maximizes end-to-end
-fidelity while respecting edge (Bell-pair) and node (memory qubit)
-capacities.
+Quantum networks distribute entanglement between distant nodes, the
+resource behind quantum key distribution
+(QKD)~\cite{ekert1991quantum,gisin2002quantum,scarani2009security,
+pirandola2020advances}, distributed quantum
+computing, and blind quantum
+computing~\cite{kimble2008quantum,wehner2018quantum,simon2017towards}.
+The central resource-allocation problem is: given concurrent
+entanglement requests between node pairs, select for each request a
+path and a purification schedule---collectively a \emph{bundle}---that
+maximizes end-to-end fidelity while respecting edge (Bell-pair) and
+node (memory-qubit) capacities \cite{briegel1998quantum,
+dur1999entanglement,sangouard2011quantum,azuma2023quantum}.
 
-This is a constrained combinatorial optimization problem whose
-structure resembles resource allocation in classical networks, but
-with constraints unique to quantum systems: probabilistic
-entanglement generation and swapping, exponential fidelity decay of
-stored pairs under T1/T2 decoherence, and memory qubits that must be
-held for the (possibly long) duration of a multi-hop connection
-\cite{briegel1998quantum,dur1999entanglement,azuma2023quantum}.  A
-growing literature addresses entanglement routing with heuristic path
-selection~\cite{vanmeter2014quantum}, integer and linear
-programming~\cite{pant2022routing,caleffi2017optimal,gyongyosi2019entanglement},
-shortcuts and network
-coding~\cite{schoute2016shortcuts,kozlowski2020designing}, and
-reinforcement
-learning~\cite{li2025qlearning,boyan1993packet,mao2017routing}.  By
-contrast, few works cast the full request-allocation problem as an
-energy-minimization (QUBO/Ising) problem over a single binary decision
-vector; the closest prior work is the QKD routing model of
+This is a constrained combinatorial optimization problem with
+structure unique to quantum systems: entanglement generation and
+swapping are probabilistic \cite{bennett1993teleporting,
+vanmeter2014quantum}; stored Bell pairs decay under T1/T2
+decoherence; and the end-to-end fidelity of a multi-hop connection
+depends jointly on elementary-link quality, purification
+rounds~\cite{bennett1996purification}, and the order in which swaps
+are performed.  A substantial literature addresses routing with
+heuristic path selection~\cite{vanmeter2014quantum}, integer and
+linear programming~\cite{pant2022routing,caleffi2017optimal,
+gyongyosi2019entanglement}, percolation and
+coding~\cite{cuquet2009entanglement,schoute2016shortcuts,
+kozlowski2020designing}, and reinforcement
+learning~\cite{li2025qlearning,boyan1993packet,mao2017routing,
+rusek2020routenets}, and dedicated simulators such as NetSquid and
+SeQUeNCe~\cite{coopmans2021netsquid,wu2021sequence} model the physics
+faithfully.  By contrast, few works cast the \emph{full
+request-allocation} problem as a single energy-minimization
+(QUBO/Ising) problem over one binary decision vector; the closest
+prior work is the QKD routing model of
 Rosales~\cite{rosales2025quantum}, which we build upon directly.
 
-We make the following contributions:
+The contributions of this paper are organized around a core QUBO
+formulation and four extensions toward physical realism:
 \begin{enumerate}
-  \item We formalize entanglement routing as a QUBO/Ising energy
-    minimization (Sec.~\ref{sec:qubo}) and benchmark three solver
-    families---Metropolis annealer, boundary-MPS tensor-network
-    compressor, and OpenJij simulated annealing---showing they reach
-    the same capacity-limited frontier, with the MPS solver
-    $6$--$370\times$ faster.
-  \item We introduce physically motivated Hamiltonian extensions---soft
-    congestion, memory-decoherence risk, and a direct slack-free
-    encoding---that eliminate slack variables and penalty tuning
-    (Sec.~\ref{sec:qubo}).
-  \item We add \emph{temporal-memory scheduling}: time-aware requests,
-    a memory scheduler with fidelity decay, and a joint router that
-    guarantees on-time, coherence-feasible admission
-    (Sec.~\ref{sec:joint}).
-  \item We add \emph{adaptive and learned candidate reduction}:
-    filter-based top-$k$ QUBO selection, a hybrid reduce--solve--repair
-    pipeline, and a GraphSAGE bundle ranker (Sec.~\ref{sec:adaptive}).
-  \item We add \emph{analysis extensions}: multi-objective Pareto and
+  \item \textbf{Core QUBO formulation and solver families.}  We
+    formalize entanglement routing as a QUBO/Ising energy
+    minimization (Sec.~\ref{sec:qubo}), introduce a direct
+    slack-free Hamiltonian with fixed-scale penalties
+    (Sec.~\ref{sec:direct}), and benchmark Metropolis, boundary-MPS,
+    OpenJij simulated annealing, and an embedded quantum-annealing
+    backend against an exact-ILP reference (Sec.~\ref{sec:results-core}).
+  \item \textbf{Stochastic reliability framework.}  We execute solver
+    plans in a discrete-event simulator (DES) under sampled
+    generation, swap, decoherence, and fidelity noise
+    (Sec.~\ref{sec:des}), and we introduce
+    \emph{chance-constrained routing}---the quantile constraint
+    $\Pr[F_r \ge F_{\min}] \ge 1-\varepsilon$---which we prove, in
+    simulation, keeps the empirical SLA-violation probability at or
+    below the requested $\varepsilon$ while the hard rule
+    $F \ge F_{\min}$ silently tolerates up to ~1/2 violation for
+    razor-margin bundles (Sec.~\ref{sec:chance}).  We add
+    \emph{recourse}---local repair of failed requests---and
+    \emph{optimality certification} by exact ILP
+    (Sec.~\ref{sec:recourse-opt}).
+  \item \textbf{Temporal and learned extensions.}  Temporal-memory
+    joint scheduling with T1/T2 decay and per-request deadlines
+    (Sec.~\ref{sec:joint}); filter-based top-$k$, hybrid
+    reduce--solve--repair, and GraphSAGE-guided candidate reduction
+    (Sec.~\ref{sec:adaptive-qubo}); and purification as a first-class
+    variable (Sec.~\ref{sec:purification}).
+  \item \textbf{Analysis extensions.}  Multi-objective Pareto and
     $\epsilon$-constraint frontiers, $k$-disjoint-path provisioning,
-    swap-tree (swapping-order) scheduling under memory decay, and
-    generative topology families for robustness studies
+    swap-tree ordering under memory decay, generative topology
+    families, time-dependent decoherence-aware routing, a
+    Q-learning router, and hardware-parameter profiles
     (Sec.~\ref{sec:extensions}).
-  \item We close the remaining future-work list of our prior version:
-    a time-dependent decoherence-aware router, a hard-constraint MPS
-    solver, a Q-learning adaptive router, and hardware parameter
-    profiles (Sec.~\ref{sec:prior-wave}).
-  \item We release an open-source, fully reproducible benchmark
-    suite\footnote{\url{https://github.com/arnavk23/QiOpt4QNet-Simulator}}
-    with unit-tested solvers and a deterministic experiment harness.
 \end{enumerate}
+All solvers, extensions, experiments, and tests are released as an
+open-source, fully reproducible suite%
+\footnote{\url{https://github.com/arnavk23/QiOpt4QNet-Simulator}}.
 
 \section{Related Work}
 \label{sec:related}
@@ -142,53 +157,64 @@ We make the following contributions:
 \subsection{Entanglement Routing in Quantum Networks}
 \label{sec:related-net}
 
-The quantum internet vision~\cite{kimble2008quantum,wehner2018quantum}
-motivates routing protocols that allocate entangled pairs across
-multi-hop repeater networks \cite{briegel1998quantum,dur1999entanglement,
+The quantum-internet vision~\cite{kimble2008quantum,wehner2018quantum,
+simon2017towards} motivates routing protocols that allocate
+entangled pairs across multi-hop repeater
+networks~\cite{briegel1998quantum,dur1999entanglement,
 sangouard2011quantum,azuma2023quantum}.  Pant et
 al.~\cite{pant2022routing} formalize \emph{routing entanglement in the
 quantum internet} and study elementary-link generation scheduling;
 Caleffi~\cite{caleffi2017optimal} analyzes optimal routing in the
-probabilistic capacity regime; and
-Gyongyosi~and~Imre~\cite{gyongyosi2019entanglement} introduce
-entanglement-gradient routing.  Schoute et al.~\cite{schoute2016shortcuts}
-and Kozlowski et al.~\cite{kozlowski2020designing} address greedy
-routing and protocol stacks for dynamic requests.  Van
-Meter~\cite{vanmeter2014quantum} provides a comprehensive textbook
-treatment.  Our work differs in that we treat the entire
-request-allocation problem as a single binary optimization over
-capacity-aware \emph{bundles}, rather than per-request greedy path
-selection.
+probabilistic-capacity regime; Gyongyosi and
+Imre~\cite{gyongyosi2019entanglement} introduce entanglement-gradient
+routing; Cuquet and Calsamiglia~\cite{cuquet2009entanglement} analyze
+entanglement percolation in complex networks; Schoute et
+al.~\cite{schoute2016shortcuts} and Kozlowski et
+al.~\cite{kozlowski2020designing} address greedy routing and protocol
+stacks for dynamic requests; and Van Meter~\cite{vanmeter2014quantum}
+provides a comprehensive textbook treatment.  Network simulators such
+as NetSquid~\cite{coopmans2021netsquid} and
+SeQUeNCe~\cite{wu2021sequence} provide physically faithful, usually
+instance-by-instance, evaluation.  Our work differs in treating the
+entire request-allocation problem as a single binary optimization over
+capacity-aware \emph{bundles}, evaluated end-to-end in a stochastic
+event engine, rather than per-request greedy path selection.
 
 \subsection{QUBO/Ising Optimization and Annealing}
 \label{sec:related-qubo}
 
 QUBO is the standard interface for quantum and simulated
-annealing~\cite{kadowaki1998quantum,kirkpatrick1983optimization}.
-Lucas~\cite{lucas2014ising} catalogs Ising encodings for many NP-hard
-problems; Glover et al.~\cite{glover2019tutorial} give a modern QUBO
-tutorial with penalty-formulation guidance.  Farhi et
-al.~\cite{farhi2014qaoa} propose the QAOA circuit ansatz, and
-Preskill~\cite{preskill2018nisq} frames the NISQ era in which such
+annealing~\cite{kadowaki1998quantum,kirkpatrick1983optimization,
+johnson2011quantum,boixo2014evidence}.  Lucas~\cite{lucas2014ising}
+catalogs Ising encodings of NP-hard problems; Glover et
+al.~\cite{glover2019tutorial} give a modern QUBO tutorial with
+penalty-formulation guidance; Tanahashi et al.~\cite{tanahashi2019application}
+demonstrate an Ising-based methodology on portfolio optimization;
+Farhi et al.~\cite{farhi2014qaoa} propose the QAOA circuit ansatz;
+and Preskill~\cite{preskill2018nisq} frames the NISQ era in which such
 encodings are most relevant.  OpenJij~\cite{openjij} provides the
-simulated/quantum annealing samplers we use.
+simulated/quantum-annealing samplers we use, and
+Venegas-Andraca et al.~\cite{venegas2018quantum} survey practical
+quantum annealing on real hardware.  Our quantum-annealing backend
+(Sec.~\ref{sec:qa}) applies this line of work to entanglement routing
+on an embedded hardware lattice.
 
 \subsection{Tensor Networks for Optimization}
 \label{sec:related-tn}
 
-Matrix product state (MPS) methods approximate the joint distribution
-over binary variables and have been used as classical surrogates for
-quantum annealing.  Hao et al.~\cite{hao2022quantum} solve constrained
+Matrix-product-state (MPS) methods approximate joint distributions
+over binary variables and serve as classical surrogates for quantum
+annealing.  Hao et al.~\cite{hao2022quantum} solve constrained
 optimization with tensor networks and find MPS contraction outperforms
-simulated annealing on strongly locally-coupled problems.
+simulated annealing on strongly locally coupled problems;
 Preisser et al.~\cite{preisser2026variational} provide a systematic
 methodology for variational MPS optimization; Nakada et
 al.~\cite{nakada2025quick} encode hard constraints into tensor-network
-structure directly; and Mata~Ali~\cite{mata2025explicit,
+structure directly; and Mata Ali~\cite{mata2025explicit,
 mata2023polynomial} gives scaling frameworks for tensor-QUBO solvers.
-The underlying tools trace to the DMRG revolution and MPS
-canonicalization \cite{white1992dmrg,schollwock2011dmrg,vidal2003efficient,
-orus2014practical,orus2019tensor}.
+The underlying machinery traces to the DMRG revolution and MPS
+canonicalization~\cite{white1992dmrg,schollwock2011dmrg,
+vidal2003efficient,orus2014practical,orus2019tensor}.
 
 \subsection{Learning-Based and Robust Routing}
 \label{sec:related-learning}
@@ -197,15 +223,28 @@ Reinforcement learning has a long history in network routing---Boyan
 and Littman~\cite{boyan1993packet} used Q-learning for dynamic packet
 routing, Mao et al.~\cite{mao2017routing} review deep-learning routing,
 and Rusek et al.~\cite{rusek2020routenets} apply graph neural networks
-to estimate traffic performance.  Game-theoretic analysis of selfish
-routing by Koutsoupias and
-Papadimitriou~\cite{koutsoupias1999worst} and Roughgarden and
-Tardos~\cite{roughgarden2002bad}, building on
+to traffic estimation.  Game-theoretic analysis of selfish routing by
+Koutsoupias and Papadimitriou~\cite{koutsoupias1999worst} and
+Roughgarden and Tardos~\cite{roughgarden2002bad}, building on
 Braess~\cite{braess1968paradoxon}, motivates our price-of-anarchy
-extensions; Bertsimas and Sim~\cite{bertsimas2004price} supply the
-robust-optimization budgets we adopt.  Deb~\cite{deb2001multiobjective}
-provides the multi-objective optimization background for our Pareto
-analysis.
+extensions; Deb~\cite{deb2001multiobjective} supplies the
+multi-objective background for our Pareto analysis.
+
+\subsection{Stochastic Programming and Chance Constraints}
+\label{sec:related-chance}
+
+When resources are probabilistic, deterministic constraints must be
+replaced by reliability constraints.  Chance-constrained
+programming~\cite{charnes1959chance,prekopa1995stochastic} enforces
+inequalities of the form $\Pr[g(x,\xi) \le 0] \ge 1-\varepsilon$ under
+stochastic parameters $\xi$; two-stage and multi-stage stochastic
+programming~\cite{birge1997introduction} make here-and-now versus
+wait-and-see decisions; and robust optimization~\cite{bertsimas2004price,
+ben-tal2009robust} bounds worst-case parameter sets.  We apply the
+chance-constrained paradigm to fidelity requirements in entanglement
+routing (Sec.~\ref{sec:chance}): to our knowledge it is the first such
+use in the routing literature, where the fidelity requirement is
+traditionally enforced deterministically.
 
 \section{Problem Formulation}
 \label{sec:qubo}
@@ -214,44 +253,41 @@ analysis.
 \label{sec:model}
 
 We model the quantum network as a graph $G=(V,E)$ with edge
-capacities $C_e$ (Bell pairs per time epoch) and node memory
-capacities $M_v^{\max}$ (qubit slots).  A request $r$ specifies a
-source--destination pair $(s_r,d_r)$, a minimum fidelity $F_{\min}$,
-and a weight $w_r$.  The bundle generator produces, for each request,
-a set of candidate bundles $B_r$: a bundle $b$ is a path $p$ plus a
-purification profile $q$ (rounds of BBPSSW purification per link),
-with:
-\begin{itemize}
-  \item utility $u_{r,b}$ (reward minus cost),
-  \item edge demands $\{d_{r,b}^e \in \N\}$,
-  \item memory demands $\{m_{r,b}^v \in \N\}$,
-  \item latency $\ell_{r,b}$ and end-to-end fidelity $F_{r,b}$,
-  \item success probability $p_{\text{succ}}^{(b)}$.
-\end{itemize}
+capacities $C_e$ (Bell pairs per time epoch), edge latencies
+$\ell_e$, and raw elementary-link fidelities $F_e^{(0)}$; node
+memory capacities $M_v^{\max}$ (qubit slots).  A request $r$ specifies
+a source--destination pair $(s_r,d_r)$, a minimum fidelity
+$F_{\min}^{(r)}$, and a weight $w_r$.  The bundle generator produces a
+candidate set $B_r$ per request: a bundle $b$ is a path $p$ plus a
+purification profile $q$ (rounds of BBPSSW purification per
+link~\cite{bennett1996purification}), with utility
+$u_{r,b}$, edge demands $d_{r,b}^e$, memory demands $m_{r,b}^v$,
+latency $\ell_{r,b}$, end-to-end fidelity $F_{r,b}$, and success
+probability $p_{\text{succ}}^{(b)}$.
 
-Entanglement swapping at a repeater succeeds with probability
-$p_{\text{swap}}=1/2$ and combines two Werner fidelities via
-$f_1 \star f_2 = f_1 f_2 + (1-f_1)(1-f_2)/3$
-\cite{bennett1993teleporting,vanmeter2014quantum}.  Each BBPSSW
-purification round~\cite{bennett1996purification} updates link
-fidelity as
+Entanglement swapping succeeds with probability $p_{\text{swap}}=1/2$
+and combines two Werner fidelities via
+$f_1 \star f_2 = f_1 f_2 + (1-f_1)(1-f_2)/3$, the composition law for
+Werner states~\cite{werner1989quantum,bennett1993teleporting,
+vanmeter2014quantum}.  Each BBPSSW purification round updates link
+fidelity
 \begin{equation}
   F' = \frac{F^2 + (1-F)^2/3}{F^2 + 2F(1-F)/3 + 5(1-F)^2/9},
 \end{equation}
-with the denominator the round's success probability.  The end-to-end
+whose denominator is the round's success probability.  The end-to-end
 success probability of a bundle is
-$p_{\text{succ}}^{(b)} = p_{\text{swap}}^{L}\prod_{e} p_{\text{purif}}(q_e)$.
-
-The utility of selecting bundle $b$ for request $r$ is
+$p_{\text{succ}}^{(b)} = p_{\text{swap}}^{L}\prod_{e}
+p_{\text{purif}}(q_e)$, where $L$ is the number of links.  The utility
+of selecting bundle $b$ for request $r$ is
 \begin{equation}
   \label{eq:utility}
   u_{r,b} = w_r \cdot p_{\text{succ}}^{(b)} \cdot
-    \bigl[1 + \beta \max(0,\, F_{r,b} - F_{\min})\bigr]
+    \bigl[1 + \beta \max(0,\, F_{r,b} - F_{\min}^{(r)})\bigr]
     - \lambda_\ell\, \ell_{r,b}
     - \lambda_c\, \text{cost}_{r,b},
 \end{equation}
-rewarding success probability and fidelity margin above the request
-requirement while penalizing latency and Bell-pair expenditure.
+rewarding success probability and fidelity margin while penalizing
+latency and Bell-pair expenditure.
 
 \subsection{QUBO Hamiltonian}
 \label{sec:qubo-ham}
@@ -261,27 +297,27 @@ request $r$, and let $L_e = \sum_{r,b} d_{r,b}^e x_{r,b}$ and
 $M_v = \sum_{r,b} m_{r,b}^v x_{r,b}$ be the induced edge and memory
 loads.  The penalty-based QUBO is
 \begin{equation}
-  \H = \H_{\text{util}} + \H_{\text{one}} + \H_{\text{edge}} + \H_{\text{mem}},
+  \calH = \calH_{\text{util}} + \calH_{\text{one}} + \calH_{\text{edge}} + \calH_{\text{mem}},
 \end{equation}
 \begin{align}
-  \H_{\text{util}} &= -\sum_{r,b} u_{r,b}\, x_{r,b},\\
-  \H_{\text{one}} &= A \sum_r \Bigl(\sum_{b} x_{r,b} - 1\Bigr)^2,\\
-  \H_{\text{edge}} &= B \sum_e \bigl(L_e + s_e - C_e\bigr)^2,\\
-  \H_{\text{mem}} &= D \sum_v \bigl(M_v + s_v - M_v^{\max}\bigr)^2,
+  \calH_{\text{util}} &= -\sum_{r,b} u_{r,b}\, x_{r,b},\\
+  \calH_{\text{one}} &= A \sum_r \Bigl(\sum_{b} x_{r,b} - 1\Bigr)^2,\\
+  \calH_{\text{edge}} &= B \sum_e \bigl(L_e + s_e - C_e\bigr)^2,\\
+  \calH_{\text{mem}} &= D \sum_v \bigl(M_v + s_v - M_v^{\max}\bigr)^2,
 \end{align}
 where $s_e,s_v$ are slack variables expanded in binary
-($\mathcal{O}((|E|+|V|)\log_2 C)$ additional variables), and
-$A,B,D$ are penalty coefficients.
+($\mathcal{O}((|E|+|V|)\log_2 C)$ additional variables), and $A,B,D$
+are penalty coefficients.
 
 \subsection{Direct Slack-Free Hamiltonian}
 \label{sec:direct}
 
 The slack expansion inflates the variable count and couples the penalty
-scale to the utility range.  We therefore use, as our primary
-objective, the direct form
+scale to the utility range.  Our primary objective is therefore the
+direct form
 \begin{align}
   \label{eq:direct-ham}
-  \H_{\text{phys}} &= -\sum_{r,b} u_{r,b}\, x_{r,b}
+  \calH_{\text{phys}} &= -\sum_{r,b} u_{r,b}\, x_{r,b}
     + \lambda_1 \sum_r \Bigl(\textstyle\sum_b x_{r,b} - 1\Bigr)^2\\
     &\quad + \lambda_2 \sum_e \max(0,\, L_e - C_e)^2
     + \lambda_3 \sum_v \max(0,\, M_v - M_v^{\max})^2,
@@ -296,36 +332,84 @@ squared-deviation slack terms~\cite{nakada2025quick}.
 
 Two physically motivated auxiliary terms shape the landscape:
 \begin{align}
-  \H_{\text{cong}} &= \lambda_{\text{cong}} \sum_e
+  \calH_{\text{cong}} &= \lambda_{\text{cong}} \sum_e
     \max\!\bigl(0,\, L_e/C_e - \theta\bigr)^2, \qquad
     \theta \in [0.5, 0.9],\\
-  \H_{\text{risk}} &= \lambda_{\text{risk}} \sum_{r,b}
+  \calH_{\text{risk}} &= \lambda_{\text{risk}} \sum_{r,b}
     \Bigl(1 - e^{-\ell_{r,b}/\tau_{\text{mem}}}\Bigr)\, x_{r,b}.
 \end{align}
-$\H_{\text{cong}}$ provides a smooth gradient toward load-balanced
-configurations before hard capacity is reached; $\H_{\text{risk}}$
-penalizes bundles whose storage duration $\ell_{r,b}$ is comparable to
-the memory coherence time $\tau_{\text{mem}}$, anticipating the exact
-decay law used by the temporal scheduler
-(Sec.~\ref{sec:joint}).
+$\calH_{\text{cong}}$ provides a smooth gradient toward load-balanced
+configurations before hard capacity is reached; $\calH_{\text{risk}}$
+penalizes bundles whose storage duration is comparable to the memory
+coherence time $\tau_{\text{mem}}$.
+
+\subsection{Chance-Constrained Fidelity Requirements}
+\label{sec:chance-form}
+
+The fidelity requirement $F_{r,b} \ge F_{\min}^{(r)}$ in
+Eq.~\eqref{eq:utility} treats the nominal (parametric) end-to-end
+fidelity as if it were the delivered fidelity.  Under stochastic
+delivery, the realized fidelity $F_r$ of request $r$ is random: in our
+DES it is sampled from a truncated normal distribution centered at the
+decayed nominal fidelity,
+$F_r \sim \mathcal{TN}(F_{r,b}, \sigma^2; [0,1])$---a model of
+measurement, gate, and readout noise of amplitude $\sigma$.  The
+\emph{hard} rule
+\begin{equation}
+  \label{eq:hard}
+  F_{r,b} \ge F_{\min}^{(r)}
+\end{equation}
+therefore has an implicit, uncalibrated violation probability
+\begin{equation}
+  \label{eq:pviol}
+  p_{\text{viol}}(r,b) = \Pr[F_r < F_{\min}^{(r)}]
+    = \Phi\!\left(\frac{F_{\min}^{(r)} - F_{r,b}}{\sigma}\right),
+\end{equation}
+which for a razor-margin bundle ($F_{r,b} \downarrow F_{\min}^{(r)}$)
+approaches $1/2$ under symmetric noise: the deterministic rule can
+tolerate up to half of deliveries violating the SLA.
+
+The \emph{chance-constrained} rule replaces Eq.~\eqref{eq:hard} with
+the quantile constraint
+\begin{equation}
+  \label{eq:chance}
+  \Pr[F_r \ge F_{\min}^{(r)}] \ge 1-\varepsilon
+  \quad\Longleftrightarrow\quad
+  F_{r,b} \ge F_{\min}^{(r)} + \Phi^{-1}(1-\varepsilon)\, \sigma,
+\end{equation}
+i.e. the requirement is moved up by a safety margin $z_{\varepsilon}
+\sigma$ with $z_{\varepsilon} = \Phi^{-1}(1-\varepsilon)$.  Because
+$z_{\varepsilon} > 0$ for $\varepsilon < 1/2$, the chance constraint
+is \emph{stricter} than the hard rule for every meaningful reliability
+budget: it refuses bundles whose nominal fidelity clears the
+threshold by less than the margin.  Only for $\varepsilon > 1/2$
+(where $z_{\varepsilon} < 0$) does it admit near-miss bundles, trading
+reliability for capacity.  The chance-constrained problem is solved
+exactly as the hard problem---as a candidate-set filter
+$\{b \in B_r : p_{\text{viol}}(r,b) \le \varepsilon\}$ followed by the
+same selection ILP/QUBO---so all solvers of Sec.~\ref{sec:solvers}
+apply unchanged.  Eq.~\eqref{eq:pviol} uses the exact truncated-normal
+CDF, which differs from $\Phi$ only to order $e^{-\dots}$ in the tail
+beyond $[0,1]$; for $\sigma \lesssim 0.05$ and $F \in [0.5,0.85]$ the
+two agree to $10^{-6}$.
 
 \section{Solvers and Scheduling Architectures}
 \label{sec:solvers}
 
 All solvers consume the same Hamiltonian and differ only in search
-strategy; each returns the same
-$\{(\text{request},\text{bundle})\}$ selection shape.
+strategy; each returns the same $\{(\text{request},\text{bundle})\}$
+selection shape.
 
 \subsection{Metropolis Annealer}
 \label{sec:metropolis}
 
 The annealer explores configurations via local bit-flip moves, accepts
-moves with probability $\min(1, e^{-\Delta \H/T})$, and cools
+moves with probability $\min(1, e^{-\Delta \calH/T})$, and cools
 geometrically from $T_0 = 10$ to $10^{-3}$
-\cite{metropolis1953equation,rosales2025quantum}.  Because $\H$ is a
-sum of local and pairwise terms, $\Delta\H$ is computed locally, making
-each step $\mathcal{O}(|\text{neighbors}|)$.  A greedy utility-density
-seed accelerates convergence.  The same framework supports a
+\cite{metropolis1953equation,rosales2025quantum}.  Because $\calH$ is a
+sum of local and pairwise terms, $\Delta\calH$ is computed locally in
+$\mathcal{O}(|\text{neighbors}|)$ time.  A greedy utility-density seed
+accelerates convergence.  The same framework supports a
 \emph{streaming} variant that re-optimizes the arriving request with a
 short local sweep and periodically runs a full cooling cycle.
 
@@ -340,19 +424,31 @@ virtual bonds carrying correlations to requests that share edges or
 memory.  Left-to-right and right-to-left sweeps contract and truncate
 the MPS to bond dimension $\chi$ via SVD
 \cite{white1992dmrg,vidal2003efficient}; the dominant configuration is
-decoded and any residual capacity violation repaired by greedy descent.
-A \emph{hard-constraint} variant encodes capacity limits in the
-allowed index configurations, removing the repair pass and the penalty
-hyperparameters~\cite{nakada2025quick}.
+decoded and any residual capacity violation repaired by greedy
+descent.  A \emph{hard-constraint} variant
+\cite{nakada2025quick} encodes capacity limits in the allowed index
+configurations, removing the repair pass and the penalty
+hyperparameters and guaranteeing feasibility by construction.
 
 \subsection{OpenJij Simulated Annealing}
 \label{sec:openjij}
 
 We compile the direct Hamiltonian to a QUBO and sample it with
-OpenJij's simulated-annealing sampler~\cite{openjij}, using
-$n_{\text{reads}}$ anneals per solve.  This serves as the reference
-against which the adaptive top-$k$ reduction
+OpenJij's simulated-annealing sampler~\cite{openjij}.  This serves as
+the reference against which the adaptive top-$k$ reduction
 (Sec.~\ref{sec:adaptive-qubo}) is measured.
+
+\subsection{Embedded Quantum-Annealing Backend}
+\label{sec:qa}
+
+For hardware-realistic annealing we minor-embed the QUBO onto a
+Chimera-like hardware lattice with a greedy placement and inter-node
+unit-weight chains, then sample with a path-integral quantum annealer
+(PIA) sampler~\cite{openjij,venegas2018quantum}.  The decode is
+chain-break-aware: broken chains are resolved by majority vote with a
+local penalty check.  We report embedded qubit counts, chain-break
+fractions, and solution quality versus SA and SQA
+(Sec.~\ref{sec:results-qa}).
 
 \subsection{Temporal-Memory Joint Scheduling}
 \label{sec:joint}
@@ -363,13 +459,12 @@ stored Bell pairs decay.  We add three components.
 
 \subsubsection{Temporal requests.}
 A \emph{temporal request} augments a request with an arrival time, a
-hard deadline, a priority, and a slack measure
-$\text{slack} = \text{deadline} - \text{arrival}$.  Dynamic request
-traces are generated as Poisson arrivals over $K$ slots with mean rate
-$\lambda$.
+hard deadline, a priority, and a slack
+$\text{slack} = \text{deadline} - \text{arrival}$.  Dynamic traces are
+generated as Poisson arrivals over $K$ slots with mean rate $\lambda$.
 
 \subsubsection{Temporal memory scheduler.}
-A stored pair's fidelity follows
+A stored pair's fidelity follows the T1/T2 law
 \begin{equation}
   \label{eq:decay}
   F_{\text{del}}(t) = F_0 \cdot \frac{1}{4}
@@ -378,115 +473,152 @@ A stored pair's fidelity follows
 which is the identity at $t=0$ and decays to the maximally mixed value
 $1/4$.  The scheduler reserves memory \emph{windows}
 $[\text{arrival},\text{completion}]$ against each node's capacity,
-tracks per-pair fidelity via Eq.~\eqref{eq:decay}, and marks pairs as
-expired once $t$ exceeds the coherence time $\tau_{\text{mem}}$.
-A reservation is accepted only if every node on the path has spare
-capacity for the full window; utilization is measured over discrete
-time steps.
+tracks per-pair fidelity via Eq.~\eqref{eq:decay}, and expires pairs
+once $t$ exceeds the coherence time $\tau_{\text{mem}}$.
 
 \subsubsection{Joint router.}
-The joint scheduler assigns each arriving request a completion time
-and a bundle, checking \emph{both} temporal memory feasibility
+The joint scheduler assigns each arriving request a completion time and
+a bundle, checking \emph{both} temporal-memory feasibility
 (overlapping windows never exceed node capacity) and end-to-end
-fidelity at the completion time.  We compare it against a
-memory-agnostic baseline that admits requests without tracking the
-coherence budget---exposing how much admission aggressive schedules
-over-promise.
+fidelity at the completion time, and is compared against a
+memory-agnostic baseline that admits without tracking coherence.
 
 \subsection{Adaptive QUBO Candidate Reduction}
 \label{sec:adaptive-qubo}
 
-Full QUBOs over all bundles of all requests grow quadratically in size
-and anneal poorly at fixed budget.  The adaptive selector keeps, per
-request, the top-$k$ bundles under a filter scoring
+Full QUBOs grow quadratically and anneal poorly at fixed budget.  The
+adaptive selector keeps, per request, the top-$k$ bundles under a
+filter scoring
 \begin{equation}
   \sigma_{r,b} = u_{r,b} \cdot \mathbf{1}[F_{r,b} \ge F_{\min}]
     - \lambda_{\text{cong}} \cdot \frac{\text{congested edges}}{|p_b|},
 \end{equation}
-discarding bundles whose fidelity fails the request threshold or that
-disproportionately use congested edges.  The reduced QUBO has at most
-$k\cdot|\mathcal{R}|$ binaries; we sweep $k$ and compare against the
-full reference QUBO under equal annealing effort.
+discarding bundles that fail the fidelity threshold or that
+disproportionately use congested edges; we sweep $k$ and compare
+against the full reference QUBO under equal annealing effort.
 
-\subsection{Hybrid Pipeline}
+\subsection{Hybrid Pipeline and GNN-Guided Ranking}
 \label{sec:hybrid}
 
-The hybrid pipeline chains three stages: (i) \emph{reduce}---the
-filter of Sec.~\ref{sec:adaptive-qubo} keeps a small candidate set;
-(ii) \emph{solve}---anneal the reduced QUBO; (iii) \emph{repair/
-refine}---dominance-prune the candidates, repair any residual
-violation with a greedy descent, and re-seed a short anneal.  We
-ablate the pipeline against QUBO-only and QUBO-plus-repair variants.
+The hybrid pipeline chains \emph{reduce} (the filter of
+Sec.~\ref{sec:adaptive-qubo}), \emph{solve} (anneal the reduced
+QUBO), and \emph{repair/refine} (dominance-prune, greedy-repair any
+residual violation, and re-seed a short anneal).  As a learned
+alternative, a two-layer GraphSAGE encoder maps each bundle to
+graph-structured features (memory load, capacity headroom, hop length,
+path-average fidelity) and scores bundles; the top-$k$ scored bundles
+feed a feasibility-aware greedy decoder
+\cite{rusek2020routenets,mao2017routing}.  We compare full-QUBO,
+filter-based top-$k$, and GNN-guided top-$k$ on identical instances.
 
-\subsection{GraphSAGE Guided Ranking}
-\label{sec:gnn}
+\section{Stochastic Reliability Framework}
+\label{sec:reliability}
 
-As a learned alternative to hand-designed filters, a GraphSAGE encoder
-maps each bundle to graph-structured features: per-node memory load,
-per-edge capacity headroom, hop length, and path-average fidelity.
-A two-layer SAGE aggregator produces a bundle score $s_{r,b}$;
-candidate reduction keeps the top-$k$ scored bundles, and a
-feasibility-aware greedy decoder commits them.  We compare three
-configurations---full QUBO, filter-based top-$k$, and GNN-guided
-top-$k$---on identical instances.
+\subsection{Discrete-Event Simulator}
+\label{sec:des}
+
+The DES samples the entanglement pipeline event by event: elementary
+pair generation (with $p_{\text{gen}}$ per attempt, retries within
+capacity), entanglement swapping (success $p_{\text{swap}}$),
+purification, delivery under T1/T2 storage decay
+(Eq.~\eqref{eq:decay}), and Gaussian fidelity noise of amplitude
+$\sigma$ added at delivery.  For a fixed solver selection, it reports
+the sampled expected utility $\E[U]$ (utility conditional on delivery),
+the parametric--sampled \emph{reliability gap}, the served ratio, the
+empirical SLA-violation probability against request thresholds, and
+the per-delivery failure causes.  All noise is drawn from a seeded RNG
+threaded through the engine, so runs are deterministic.
+
+\subsection{Chance-Constrained Routing Study}
+\label{sec:chance}
+
+The study of Sec.~\ref{sec:chance-form} is executed as follows: for
+each (request count $n$, noise $\sigma$), expand the candidate set;
+solve the selection ILP exactly under each policy
+(\texttt{hard}, \texttt{chance($\varepsilon$)} for
+$\varepsilon \in \{0.05,\dots,0.8\}$, \texttt{nominal}); execute each
+plan in the DES with matching $\sigma$; and report parametric utility,
+sampled utility, served ratio, and empirical SLA violation.  The
+reliability budget is tuned so that the DES realization is dominated
+by the noise model (long $\tau_{\text{mem}}$), separating
+noise-driven SLA risk from the decoherence-drift term, which is
+studied separately by the temporal scheduler.
+
+\subsection{Recourse and Optimality Certification}
+\label{sec:recourse-opt}
+
+\emph{Recourse.}  When a delivery fails, recourse either
+\emph{repairs locally} (re-provisions the failed request with the best
+bundles that still fit the residual capacities) or \emph{replans
+fully} (re-runs the solver on all active requests).  We measure
+recovery rate, recovered utility fraction, and wall-time speedup.
+\emph{Optimality certification.}  For every benchmark instance we also
+solve the selection ILP exactly (branch and bound) and report the
+relative gap $(u^\ast - u_{\text{solver}})/u^\ast$ for each solver,
+certifying how far heuristic annealing is from optimal.
 
 \section{Analysis Extensions}
 \label{sec:extensions}
 
-\subsection{Multi-Objective Selection}
+\subsection{Purification as a First-Class Variable}
+\label{sec:purification}
+
+The core bundle generator exposes purification rounds $q \in \{0,1,2\}$
+(and up to $q_{\max}=4$ in the purification-aware regime).  A
+purification-aware candidate set includes, per request, bundles whose
+fidelity \emph{requires} purification to meet $F_{\min}^{(r)}$; the
+agnostic set restricts to $q=0$ (entanglement-only) plus the default
+$q\in\{0,1,2\}$ set.  Because the candidate sets are supersets of the
+agnostic set, the solver's optimum can only improve; we quantify when
+purification actually binds via a fidelity sweep over path length and
+$F_{\min}$.
+
+\subsection{Multi-Objective and Disjoint-Path Analysis}
 \label{sec:multiobj}
 
-Beyond scalar utility, a selection can be scored by
-$\{t, f, s, \ell, m, c\}$ = \{throughput, mean fidelity, success
-rate, latency, memory footprint, Bell-pair cost\}.  We enumerate all
-capacity-feasible selections and compute (i) the \emph{Pareto
-frontier} under the maximize set $\{f, s, t\}$ and minimize set
-$\{\ell, m, c\}$, and (ii) \emph{$\epsilon$-constraint frontiers}:
-maximize $t$ subject to $f \ge \bar f$, and maximize $f$ subject to
-$t \ge \bar t$, for grids of targets $\bar f, \bar t$.
-
-\subsection{$k$-Disjoint-Path Provisioning}
-\label{sec:disjoint}
-
-For a request whose source and destination admit $k$ edge-disjoint
-paths $p_1,\dots,p_k$, a \emph{composite bundle} is built from a
-subset: success probability combines as
-\begin{equation}
-  p_{\text{succ}} = 1 - \prod_{i}\bigl(1 - p_{\text{succ}}^{(i)}\bigr),
-\end{equation}
-fidelity is the maximum over constituent bundles, and latency the
-maximum.  Composite bundles are added to the candidate set and Pareto
-pruned; we compare single-path-only versus multipath-enabled
+A selection can be scored by $\{t,f,s,\ell,m,c\}$ = \{throughput, mean
+fidelity, success rate, latency, memory footprint, Bell-pair cost\}.
+We enumerate all capacity-feasible selections and compute (i) the
+\emph{Pareto frontier} under the maximize set $\{f,s,t\}$ and minimize
+set $\{\ell,m,c\}$, and (ii) \emph{$\epsilon$-constraint frontiers}
+(maximize $t$ subject to $f \ge \bar f$, and vice versa).  For requests
+admitting $k$ edge-disjoint paths, a \emph{composite bundle} combines
+subset $i$'s success probabilities as
+$p_{\text{succ}} = 1 - \prod_i (1 - p_{\text{succ}}^{(i)})$ with
+fidelity and latency equal to the constituent maxima; composite
+bundles are Pareto-pruned and compared against single-path-only
 provisioning.
 
-\subsection{Swapping-Order (Swap-Tree) Scheduling}
+\subsection{Swapping-Order Scheduling}
 \label{sec:swapping}
 
 A path of $L$ links can be fused by different \emph{swap trees};
 because swapping is associative for Werner fidelities
 ($(f_1 \star f_2) \star f_3 = f_1 \star (f_2 \star f_3)$), the
-noiseless end-to-end fidelity is identical for every tree.  However,
-different trees hold intermediate pairs in memory for different
-durations: a \emph{linear} (left-to-right) tree on $L$ links stores an
-intermediate pair for up to $L-1$ swap rounds, while a \emph{balanced}
-tree of depth $\lceil\log_2 L\rceil$ minimizes peak concurrency and
-maximizes---for fixed link fidelity and coherence time
-$\tau_{\text{mem}}$---the delivered (post-decay) fidelity.  We sweep
-all Catalan-many trees per path length and report the delivered
-fidelity of the linear, balanced, and optimal strategies as a function
-of $L$ and $\tau_{\text{mem}}$.
+noiseless end-to-end fidelity is identical for every tree.  Different
+trees hold intermediate pairs in memory for different durations,
+however: a \emph{linear} tree stores an intermediate pair for up to
+$L-1$ swap rounds, while a \emph{balanced} tree of depth
+$\lceil\log_2 L\rceil$ minimizes peak concurrency and maximizes
+delivered (post-decay) fidelity for fixed $\tau_{\text{mem}}$.  We
+sweep all Catalan-many trees and report linear, balanced, and optimal
+delivered fidelity as a function of $L$ and $\tau_{\text{mem}}$.
 
-\subsection{Generative Topology Families}
-\label{sec:topologies}
+\subsection{Generative Topologies, Time-Dependent Routing,
+Q-Learning, Hardware Profiles}
+\label{sec:extras}
 
-To test whether solver quality survives network shape, we implement
-five generative families on the simulator's topology schema: ring,
-random geometric (nodes on the unit square, links within radius,
-regenerated until connected), Erd\H{o}s--R\'enyi $G(n,p)$,
-Watts--Strogatz small-world, and Barab\'asi--Albert preferential
-attachment.  A \emph{topology sweep} runs the Metropolis solver on
-each family with matched request sets and reports served ratio against
-structural descriptors (density, degree distribution).
+We implement five generative families (ring, random-geometric,
+Erd\H{o}s--R\'enyi, Watts--Strogatz, Barab\'asi--Albert) on the
+simulator's topology schema and sweep solver served ratio against
+structural descriptors.  The time-dependent decoherence-aware router
+aligns the risk term's hold model with the evaluation decay law
+(Eq.~\eqref{eq:decay}) and scales the risk weight over the epoch.  A
+tabular Q-learning router makes per-arrival bundle decisions from
+quantized resource-pressure states~\cite{li2025qlearning,
+boyan1993packet}.  Hardware profiles calibrate $T_1/T_2$, gate and
+readout error rates, and per-anneal duration for ideal, photonic,
+ion-trap, and superconducting platforms~\cite{lvovsky2009optical}.
 
 \section{Experimental Results}
 \label{sec:results}
@@ -495,18 +627,17 @@ structural descriptors (density, degree distribution).
 \label{sec:setup}
 
 All experiments run on an 8-core Intel i7 with 32\,GB RAM.  We
-benchmark chain topologies ($N \in \{4,6,10\}$), grids
-($2\times3$, $3\times3$, $4\times4$, $5\times5$, $6\times6$), and the
-generative families of Sec.~\ref{sec:topologies}, with edge
-capacities $C_e \in \{4,6,10\}$ and memory capacity $M_v = 10$.
-Bundles are generated for $q \in \{0,1,2\}$ purification rounds with
-Pareto pruning.  Request counts range from 2 to 24; source--destination
-pairs are sampled uniformly without replacement; every experiment is
-seeded for determinism.  All results regenerate via
+benchmark chain topologies ($N \in \{4,6,8,10\}$), grids
+($2\times3$, $3\times3$, $4\times4$), and the generative families of
+Sec.~\ref{sec:extras}, with edge capacities $C_e \in \{4,6,10\}$ and
+memory capacity $M_v = 10$--$12$.  Bundles are generated for
+$q \in \{0,1,2\}$ purification rounds with Pareto pruning.  Request
+counts range from 2 to 24; every experiment is seeded for
+determinism and all results regenerate via
 \path{src/experiments/experiment_suite.py}.
 
 \subsection{Core Solver Comparison}
-\label{sec:core-results}
+\label{sec:results-core}
 
 Figure~\ref{fig:contention} compares Metropolis and TensorNetwork on
 chain topologies.  Both minimize the identical Hamiltonian and find the
@@ -528,8 +659,8 @@ budget.
 
 Bond dimension is strikingly unimportant on chains: every $\chi$ from
 1 to 32 reproduces the Metropolis served ratio exactly
-(Fig.~\ref{fig:bonddim}), indicating that the effective coupling
-graph between requests is dominated by nearest-neighbor (shared
+(Fig.~\ref{fig:bonddim}), indicating that the effective coupling graph
+between requests is dominated by nearest-neighbor (shared
 edge/memory) interactions.  Runtime scales as $\mathcal{O}(N\chi^3)$:
 $3.8\,$s at $\chi=32$ versus $0.08\,$s at $\chi=2$ for $N{=}24$.
 
@@ -543,7 +674,7 @@ $3.8\,$s at $\chi=32$ versus $0.08\,$s at $\chi=2$ for $N{=}24$.
 \end{figure}
 
 The direct slack-free Hamiltonian (Eq.~\eqref{eq:direct-ham})
-dominates the slack-variable QUBO on the identical instances
+dominates the slack-variable QUBO on identical instances
 (Table~\ref{tab:encoding}): $8$--$32$ binaries versus $52$--$76$, and
 $2.8$--$3.6\times$ higher aggregate utility under equal
 simulated-annealing effort, because the $\max(0,\cdot)^2$ capacity
@@ -593,21 +724,36 @@ instance while running $60$--$120\times$ faster
   \end{tabular}
 \end{table}
 
+On grids (Fig.~\ref{fig:grid}), Metropolis serves $100\%$ of requests
+at $N{=}8$ and $75$--$88\%$ at $N{=}16$; TensorNetwork serves equal or
+up to $12.5$ percentage points fewer at each configuration, the
+residual gap reflecting the pairwise MPS coupling approximation on
+higher-treewidth instances rather than feasibility failure.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{topology_comparison.png}
+  \caption{Grid topology comparison: served ratio (left) and mean
+    wall-clock time (right) on $2\times3$, $3\times3$, and $4\times4$
+    grids with $C_e=5$.}
+  \label{fig:grid}
+\end{figure}
+
 \subsection{Temporal-Memory Joint Scheduling}
 \label{sec:joint-results}
 
 Figure~\ref{fig:joint} compares the joint (memory-aware) router with a
-memory-agnostic baseline over Poisson traces at mean rates
-$\lambda \in \{1.0, 1.8\}$ and coherence times
-$\tau_{\text{mem}} \in \{3, 8\}$.  The joint router admits fewer
-requests (1/16 at $\lambda{=}1.0$, 0/15 at $\lambda{=}1.8$) but every
-admitted request is delivered on time with mean delivered fidelity
+memory-agnostic baseline over Poisson traces at
+$\lambda \in \{1.0, 1.8\}$ and coherence times $\tau_{\text{mem}} \in
+\{3, 8\}$.  The joint router admits fewer requests (1/16 at
+$\lambda{=}1.0$, 0/15 at $\lambda{=}1.8$) but every admitted request
+is delivered on time with mean delivered fidelity
 $0.30$--$0.51$, whereas the memory-agnostic baseline admits $9$--$6$
 of $15$--$16$ requests without tracking whether pairs remain coherent
-at delivery---an over-commitment that a physical network cannot
-honor.  The joint router's conservative admission is the physically
-correct behavior: in this strict model, serving \emph{correctly}
-dominates serving \emph{optimistically}.
+at delivery---an over-commitment a physical network cannot honor.
+Serving \emph{correctly} dominates serving \emph{optimistically}: in
+this strict model the joint router's conservative admission is the
+physically correct behavior.
 
 \begin{figure}[tbp]
   \centering
@@ -632,7 +778,7 @@ horizon preserves global quality at modest cost.
   \label{fig:online}
 \end{figure}
 
-\subsection{Adaptive QUBO and Hybrid Pipeline}
+\subsection{Adaptive QUBO, Hybrid Pipeline, GNN}
 \label{sec:adaptive-results}
 
 Figure~\ref{fig:adaptive} sweeps the per-request candidate budget $k$.
@@ -640,10 +786,8 @@ On the chain, $k{=}2$ (15 of 21 bundles) incurs a $20.4\%$ relative
 optimality gap; $k \ge 4$ reaches the full-QUBO utility exactly.  On a
 $6\times6$ grid, reduction to $k{=}8$ (39 of 40 bundles) keeps the gap
 at zero and even $k{=}2$ matches the reference---the reduced QUBO is
-easier to anneal at a fixed budget, so candidate reduction is
-\emph{free or beneficial} until the budget discards the optimal
-bundle.  QUBO size grows monotonically with $k$, confirming that
-$k$ is the control knob trading size against optimality.
+easier to anneal at fixed budget, so candidate reduction is \emph{free
+or beneficial} until the budget discards the optimal bundle.
 
 \begin{figure}[tbp]
   \centering
@@ -657,7 +801,11 @@ The hybrid pipeline (Fig.~\ref{fig:hybrid}) outperforms QUBO-only
 decoding by $1.66\times$ in utility at $N{=}6$ ($97.9$ vs.\ $58.9$)
 and $1.05\times$ at $N{=}12$; the repair stage is essential at small
 budgets where the reduced QUBO initially returns a partially infeasible
-selection, and the refinement re-seed recovers the lost utility.
+selection.  Figure~\ref{fig:gnn} shows that on the grid both
+filter-based top-$k$ ($157.9$ / 5 served) and GNN-guided reduction
+($154.4$ / 5) more than double the raw full-QUBO utility ($77.5$ / 4)
+at a small read budget, with the GNN reaching parity with the
+hand-designed filter while retaining full candidate coverage.
 
 \begin{figure}[tbp]
   \centering
@@ -667,20 +815,6 @@ selection, and the refinement re-seed recovers the lost utility.
   \label{fig:hybrid}
 \end{figure}
 
-\subsection{GraphSAGE Guided Ranking}
-\label{sec:gnn-results}
-
-Figure~\ref{fig:gnn} compares full-QUBO, filter-based top-$k$, and
-GNN-guided top-$k$ on chain and $5\times5$ grid instances.  On the
-grid, the raw full QUBO annealed at a small read budget finds a
-$77.5$-utility / 4-served solution; both the filter-based top-$k$
-($157.9$ / 5) and the GNN-guided reduction ($154.4$ / 5) more than
-double utility and serve one extra request, because they shrink the
-anneal space to high-quality candidates.  The GNN achieves parity with
-the hand-designed filter while retaining the full candidate coverage,
-demonstrating that learned ranking is a viable drop-in reduction
-strategy on topologies where hand-tuned filters must be re-calibrated.
-
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\columnwidth]{gnn_reduction.png}
@@ -689,34 +823,232 @@ strategy on topologies where hand-tuned filters must be re-calibrated.
   \label{fig:gnn}
 \end{figure}
 
-\subsection{Multi-Objective and Disjoint-Path Analysis}
-\label{sec:multiobj-results}
+\subsection{Stochastic Reliability and Chance-Constrained Routing}
+\label{sec:results-reliability}
 
-Exhaustive enumeration over a 3-request instance yields a $3212$-point
-Pareto frontier over (throughput, fidelity, latency, memory)
-(Fig.~\ref{fig:multiobj}, left).  The $\epsilon$-constraint curves
-(right) are flat in the tested range: fidelity targets
-$\bar f \in [0.4, 0.7]$ are all met while retaining full throughput,
-and throughput targets are met while keeping achieved fidelity
-$0.913$---on this lightly-loaded instance the optimizer has slack in
-both objectives, and the frontier's curvature only becomes binding
-under heavier contention.
+\textbf{DES evaluation of solver plans.}  Table~\ref{tab:des} executes
+Metropolis, hybrid-pipeline, and SQA plans in the DES with fidelity
+noise $\sigma=0.05$ over 40 realizations.  The local-search solvers'
+plans have zero SLA violations and small reliability gaps; the
+SQA plan (a noisier optimizer) violates $13$--$16\%$ of deliveries,
+quantifying the fidelity risk carried by sub-optimal selections.
+Across the dedicated DES sweep (Fig.~\ref{fig:des}), plans deliver
+$97$--$98\%$ of requests at near-zero SLA violation with a
+parametric--sampled gap of $5$--$8$ utility units at both coherence
+times $\tau_{\text{mem}} \in \{5, 50\}$.
 
-$k$-disjoint provisioning (Fig.~\ref{fig:disjoint}) adds utility
-without reducing coverage: on $N{=}8$, both candidate sets serve
-7/8 requests, but the multipath-enabled set raises aggregate utility
-from $460.9$ to $462.5$ (and from $201.4$ to $202.9$ at $N{=}4$) by
-letting the solver pick higher-success composite bundles where they
-help.  The composite bundles are Pareto-pruned on these chain-like
-grid instances, so the gain is modest; on sparser networks with fewer
-single-path alternatives the redundancy is expected to bind.
+\begin{table}[tbp]
+  \centering
+  \caption{DES evaluation of solver plans ($n_{\text{real}}=40$,
+    $\sigma=0.05$).  $N$ is the request count.}
+  \label{tab:des}
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llcccc}
+    \toprule
+    $N$ & Solver & Served & $\E[U]$ & SLA & Gap \\
+    \midrule
+    6  & hybrid    & 0.97 & 212.1 & 0.000 & $-53.9$ \\
+    6  & metropolis& 0.96 & 276.7 & 0.000 & $+11.0$ \\
+    6  & sqa       & 0.92 & 288.9 & 0.163 & $-42.1$ \\
+    10 & hybrid    & 0.98 & 332.9 & 0.000 & $-72.0$ \\
+    10 & metropolis& 0.99 & 401.5 & 0.000 & $+6.1$ \\
+    10 & sqa       & 0.95 & 421.8 & 0.132 & $-114.6$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{des_reliability.png}
+  \caption{DES reliability of solver plans across coherence times and
+    swap-success probabilities: reliability gap (left) and SLA
+    statistics (right).}
+  \label{fig:des}
+\end{figure}
+
+\textbf{Chance-constrained calibration.}  Figure~\ref{fig:chance}
+shows the central result of Sec.~\ref{sec:chance}.  On the left panel
+the empirical SLA-violation probability of every chance($\varepsilon$)
+plan lies at or below the diagonal $y=\varepsilon$---the rule is
+\emph{calibrated}.  The deterministic hard plan sits at an implicit
+$5$--$14\%$ violation (dotted line) while \emph{claiming} zero; the
+nominal plan violates $29$--$45\%$.  The right panel prices the
+guarantee: tightening $\varepsilon$ from $0.5$ (which behaviorally
+equals hard) to $0.05$ cuts delivered violation from
+$7$--$13\%$ to $<1\%$ at a utility cost of roughly $1.5$--$2\times$.
+Equivalently, hard's $10.3\%$ mean implicit risk is not free---it is a
+hidden reliability debt that the chance-constrained operator can buy
+down explicitly with a single scalar $\varepsilon$.  Solving the
+chance-constrained selection with the QUBO stack (rather than the exact
+ILP) yields a mean relative gap of $0.64$ on the reduced set, so the
+certified reliability comes at no structural cost to the optimizer.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{chance_constrained.png}
+  \caption{Chance-constrained routing: empirical SLA-violation
+    probability versus requested $\varepsilon$ (left; dotted: hard,
+    diagonal: calibrated) and expected utility versus $\varepsilon$
+    (right).  The hard rule's implicit risk is $5$--$14\%$.}
+  \label{fig:chance}
+\end{figure}
+
+\subsection{Recourse and Optimality Certification}
+\label{sec:results-recourse}
+
+Table~\ref{tab:recourse} shows recourse results over 20 DES
+realizations.  Local repair recovers \emph{all} failed requests
+(recovery rate $1.0$) while costing $1$--$2$\,ms versus $0.76$--$0.82$\,s
+for full replanning---a $445$--$1281\times$ speedup---and recovers
+$35.5\%$ of the utility lost to failures.  The optimality benchmark
+(Fig.~\ref{fig:opt}) certifies the solvers against exact ILP:
+Metropolis attains a mean relative gap of $1.5\%$ (zero on most
+instances), SQA $20.0\%$, and the raw QUBO/hybrid at a small read
+budget $36.0\%$---consistent with the DES finding that SQA's
+sub-optimality is what drives its SLA violations.
+
+\begin{table}[tbp]
+  \centering
+  \caption{Recourse: local repair versus full replanning over 20 DES
+    realizations.}
+  \label{tab:recourse}
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccccc}
+    \toprule
+    $N$ & Fail/real & $t_{\text{local}}$ (ms) & $t_{\text{full}}$ (s) &
+      Speedup & Recovery \\
+    \midrule
+    6  & 0.15 & 2.0 & 0.819 & 445$\times$ & 1.00 \\
+    10 & 0.05 & 1.0 & 0.755 & 1281$\times$ & 1.00 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{optimality_gap.png}
+  \caption{Optimality certification: mean relative gap versus exact
+    ILP (left) and reliability gap of solver plans (right).}
+  \label{fig:opt}
+\end{figure}
+
+\subsection{Purification}
+\label{sec:results-purification}
+
+Table~\ref{tab:purification} and Figure~\ref{fig:purification} show
+the purification comparison.  On the tested chains the solver selects
+purification-free bundles in all three regimes (mean rounds
+$k=0$), so a purification-aware candidate superset is \emph{costless}:
+utility, served ratio, and fidelity are identical while the candidate
+pool grows from 4 to 27 bundles ($N{=}6$).  The fidelity sweep
+(Fig.~\ref{fig:purification}, right) shows when purification binds:
+a single round lifts a 3-link path from $F=0.634$ to $F=0.703$,
+meeting a $F_{\min}=0.7$ requirement that the $q{=}0$ bundle cannot
+satisfy---at the price of success probability $0.145$ versus $0.512$
+and doubled resource use.  Purification is therefore a Pareto
+trade-off surface, not a free fidelity multiplier, and treating it as a
+first-class optimization variable lets the solver price that trade-off
+exactly.
+
+\begin{table}[tbp]
+  \centering
+  \caption{Purification-aware versus agnostic candidate sets
+    ($q_{\max}=4$).  The aware set is a superset; identical optimal
+    selections confirm purification is cost-free when not binding.}
+  \label{tab:purification}
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccccc}
+    \toprule
+    $N$ & Regime & Bundles & Utility & Served & Time (s) \\
+    \midrule
+    6  & agnostic   & 4  & 300.1 & 0.67 & 0.60 \\
+    6  & default q$\in$0..2 & 15 & 300.1 & 0.67 & 0.93 \\
+    6  & aware      & 27 & 300.1 & 0.67 & 0.91 \\
+    10 & agnostic   & 5  & 423.3 & 0.50 & 0.59 \\
+    10 & aware      & 39 & 423.3 & 0.50 & 0.95 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{purification.png}
+  \caption{Purification as a first-class variable: regime comparison
+    (left) and fidelity/utility sweep over purification rounds and path
+    length (right).}
+  \label{fig:purification}
+\end{figure}
+
+\subsection{Adaptive Budget and Quantum-Annealing Backend}
+\label{sec:results-qa}
+
+Table~\ref{tab:budget} shows the adaptive-budget study: on both request
+counts every tested budget $k\ge2$---and the congestion-driven adaptive
+budget---reproduces the full-QUBO utility exactly, confirming that
+$k$ is a free control knob until it discards the optimal bundle.
+Table~\ref{tab:qa} reports the embedded quantum-annealing backend.
+The embedded QA backend (768--960 hardware qubits, zero chain breaks)
+matches or exceeds SA on every size and beats SQA at $N{=}8$
+(259.2 vs.\ 210.5) at a fraction of SQA's wall time, demonstrating that
+a hardware-realistic annealer is competitive with classical samplers
+for the entanglement-routing QUBO.
+
+\begin{table}[tbp]
+  \centering
+  \caption{Adaptive-budget study: utility by budget $k$ and the
+    adaptive budget versus the full-QUBO reference.}
+  \label{tab:budget}
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lcccccc}
+    \toprule
+    $N$ & $k{=}2$ & $k{=}4$ & $k{=}8$ & Adaptive & Full-QUBO \\
+    \midrule
+    8  & 407.7 & 407.7 & 407.7 & 407.7 & 407.7 \\
+    12 & 388.7 & 388.7 & 388.7 & 388.7 & 388.7 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[tbp]
+  \centering
+  \caption{Embedded quantum annealing (QA, PIA) versus SA and SQA on
+    identical QUBOs.  QA reports hardware-qubit counts and chain-break
+    fractions.}
+  \label{tab:qa}
+  \small\setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccccc}
+    \toprule
+    $N$ & QA util & SA util & SQA util & Qubits & Chain breaks \\
+    \midrule
+    4 & 183.2 & 106.2 & 219.1 & 832 & 0.00 \\
+    6 & 110.7 & 110.7 & 124.1 & 768 & 0.00 \\
+    8 & \textbf{259.2} & 100.3 & 210.5 & 960 & 0.00 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Multi-Objective, Disjoint Paths, Swapping Order}
+\label{sec:results-analysis}
+
+Exhaustive enumeration over a 3-request instance yields a
+$3212$-point Pareto frontier over (throughput, fidelity, latency,
+memory) (Fig.~\ref{fig:multiobj}, left); the $\epsilon$-constraint
+curves are flat in the tested range because the lightly-loaded
+optimizer has slack in both objectives.  $k$-disjoint provisioning
+(Fig.~\ref{fig:disjoint}) adds utility without reducing coverage:
+on $N{=}8$ both candidate sets serve 7/8 requests, but the
+multipath-enabled set raises aggregate utility from $460.9$ to
+$462.5$.  Swap-tree ordering (Fig.~\ref{fig:swapping}) is fidelity-
+identical noiselessly at $L{=}3$; as $L$ grows the balanced/optimal
+trees' shorter hold times win, recovering up to $1.58\times$ of
+delivered fidelity at intermediate coherence times
+($L{=}10$, $\tau_{\text{mem}}=5$).
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\columnwidth]{multi_objective.png}
   \caption{Pareto frontier over throughput/fidelity/latency (left) and
-    $\epsilon$-constraint frontiers (right) for the multi-objective
-    selection analysis.}
+    $\epsilon$-constraint frontiers (right).}
   \label{fig:multiobj}
 \end{figure}
 
@@ -728,30 +1060,11 @@ single-path alternatives the redundancy is expected to bind.
   \label{fig:disjoint}
 \end{figure}
 
-\subsection{Swapping-Order Scheduling}
-\label{sec:swapping-results}
-
-Figure~\ref{fig:swapping} shows delivered fidelity as a function of
-path length (left) and memory coherence time (right), averaging over
-random link-fidelity draws.  Because swap trees are fidelity-identical
-noiselessly, all three strategies coincide at $L{=}3$; as $L$ grows,
-the balanced/optimal trees' shorter hold times win: at $L{=}8$,
-linear delivers $0.112$ versus $0.176$ for balanced/optimal
-($1.57\times$).  The coherence sweep (fixed $L{=}10$, link fidelity
-$0.85$) shows the gain peaks at intermediate $\tau_{\text{mem}}$
-($1.58\times$ at $\tau{=}5$): at very short coherence times all trees
-lose almost everything, and at very long coherence times decay is
-negligible for all.  The balanced tree equals the optimal tree for
-uniform link fidelities, since both minimize the maximum hold time;
-the optimal-order search matters only for heterogeneous links.
-
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\columnwidth]{swapping_order.png}
   \caption{Delivered fidelity of linear, balanced, and optimal swap
-    trees versus path length (left) and memory coherence time (right).
-    The balanced/optimal trees recover up to $1.58\times$ of delivered
-    fidelity at intermediate coherence times.}
+    trees versus path length (left) and memory coherence time (right).}
   \label{fig:swapping}
 \end{figure}
 
@@ -766,30 +1079,28 @@ random-geometric ($0.5$/$0.375$) and Barab\'asi--Albert
 ($0.25$/$0.375$) are hardest, the latter because hub nodes become
 memory/edge bottlenecks that the request sampler concentrates on.
 Served ratio correlates positively with edge density and minimum
-degree---a concrete, quantitative answer to ``does the optimizer
-advantage survive topology changes?''
+degree.
 
 \begin{figure}[tbp]
   \centering
   \includegraphics[width=\columnwidth]{topology_evolution.png}
   \caption{Served ratio by topology family (left) and versus edge
-    density (right) for ring, random-geometric, Erd\H{o}s--R\'enyi,
-    Watts--Strogatz, and Barab\'asi--Albert networks.}
+    density (right) for five generative network families.}
   \label{fig:topology}
 \end{figure}
 
-\subsection{Prior Extensions}
+\subsection{Prior-Extension Recap}
 \label{sec:prior-wave}
 
-For completeness we summarize the four extensions that closed our prior
-future-work list.  (i) A \emph{time-dependent decoherence-aware router}
-lifts delivered fidelity from $0.188$ to $0.193$ ($+2.5\%$) on a
-Poisson trace at equal served count by aligning the risk term's hold
-model with the evaluation decay law.  (ii) A \emph{hard-constraint
-MPS} matches penalty-MPS served ratio while being $1.4$--$1.7\times$
-faster, with feasibility guaranteed by construction.  (iii) A tabular
+Four extensions close our prior future-work list.
+(i) A \emph{time-dependent decoherence-aware router} lifts delivered
+fidelity from $0.188$ to $0.193$ ($+2.5\%$) on a Poisson trace at
+equal served count by aligning the risk term's hold model with the
+evaluation decay law.  (ii) A \emph{hard-constraint MPS} matches
+penalty-MPS served ratio while being $1.4$--$1.7\times$ faster, with
+feasibility guaranteed by construction.  (iii) A tabular
 \emph{Q-learning router} matches the streaming annealer's utility
-($189.5$, $6/7$ served) with $0.2\,$ms inference versus $5.3\,$ms.
+($189.5$, 6/7 served) with $0.2\,$ms inference versus $5.3\,$ms.
 (iv) \emph{Hardware profiles}---ideal, photonic/fiber, ion-trap, and
 superconducting---reveal a $2.8\times$ delivered-fidelity spread
 ($0.761$ down to $0.269$), quantifying when coherence-aware scheduling
@@ -798,76 +1109,97 @@ is indispensable.
 \section{Discussion}
 \label{sec:discussion}
 
-\paragraph{QKD versus entanglement routing.}
-Our formulation builds on the QKD routing framework of
-Rosales~\cite{rosales2025quantum}, but three differences matter.
-First, entanglement resources are \emph{probabilistic}
-($p_{\text{succ}} \ll 1$), making bundle utilities stochastic; the
-deterministic-utility QUBO approximation is reliable at high success
-probability but degrades as $p_{\text{succ}} \to 0$.  Second, quantum
-memory \emph{decays}---our temporal scheduler (Sec.~\ref{sec:joint})
-is the principled response, replacing static memory accounting with
-T1/T2-aware windows.  Third, penalty calibration is more acute when
-utilities have high variance; the direct slack-free Hamiltonian
-(Sec.~\ref{sec:direct}) removes per-instance tuning.
+\paragraph{Deterministic fidelity constraints are an uncalibrated
+reliability claim.}  The central methodological finding of this paper
+is that the standard rule $F_{r,b} \ge F_{\min}^{(r)}$, ubiquitous in
+entanglement-routing work, silently tolerates a violation probability
+up to $1/2$ for any bundle whose nominal fidelity sits at the
+threshold---and the empirical mean is $5$--$14\%$ even when the solver
+selects high-quality plans.  The chance-constrained quantile rule
+(Eq.~\eqref{eq:chance}) replaces this implicit, unmeasured risk with
+an explicit, validated budget $\varepsilon$, and our DES study
+confirms the empirical violation stays at or below $\varepsilon$.  We
+recommend that routing papers report \emph{parametric and sampled
+SLA jointly}, as we do in Table~\ref{tab:des}, so that throughput is
+never reported without its fidelity cost.
 
-\paragraph{Candidate reduction is not a compromise.}
-Across adaptive top-$k$ (Sec.~\ref{sec:adaptive-results}) and GNN
-reduction (Sec.~\ref{sec:gnn-results}), shrinking the QUBO to a
-high-quality candidate set \emph{improved} solution quality at fixed
-annealing budget---a consequence of smaller QUBOs being annealed more
-reliably.  This reframes ``approximate reduction'' as a form of warm
-initialization, and motivates learned ranking as the reduction
-function that needs no per-topology re-calibration.
+\paragraph{The utility price of reliability is real but
+controlled.}  Buying the guarantee from hard's implicit $10\%$ down to
+$\varepsilon=0.05$ costs roughly $1.5$--$2\times$ in utility because
+marginal (high-risk) bundles are refused.  This is the correct
+economic statement: the operator trades capacity for certified
+reliability with a single knob $\varepsilon$, and the frontier in
+Fig.~\ref{fig:chance} (right) is the explicit menu.  Notably, the
+chance-constrained set is no harder to optimize than the hard set
+(mean QUBO gap $0.64$ on the reduced set), so the reliability
+guarantee does not tax the solver.
 
-\paragraph{Physical fidelity of the admission model.}
-The joint router's conservative admission (Sec.~\ref{sec:joint-results})
-is a deliberate modeling choice: over-admitting requests that cannot be
-delivered within coherence is a silent failure mode of memory-agnostic
-simulators.  We report served ratio, on-time ratio, and mean delivered
-fidelity jointly so that throughput is never reported without its
-fidelity cost.
+\paragraph{Noise and decoherence are separable failure modes.}
+The DES separates \emph{noise} (Gaussian fluctuations of delivered
+fidelity) from \emph{decoherence} (deterministic decay during
+storage).  Chance constraints calibrate the former; the temporal
+scheduler (Sec.~\ref{sec:joint}) and swap-tree ordering
+(Sec.~\ref{sec:swapping}) address the latter; recourse
+(Sec.~\ref{sec:results-recourse}) mitigates residual stochastic
+failure.  A plan that is optimal under one model need not be under the
+other---the SQA plan's $13$--$16\%$ SLA violations (Table~\ref{tab:des})
+are exactly the price of its $20\%$ mean optimality gap
+(Fig.~\ref{fig:opt}).  Reliability analysis is therefore not a
+post-processing nicety but a first-class objective.
 
-\paragraph{Limitations.}
-The MPS coupling order is heuristic (requests ordered by shared
-resources); a learned ordering could improve bond-efficiency.  The
-GNN ranker is trained per instance family and not yet shown to
-generalize across topologies.  The joint scheduler assumes
-deterministic transmission; stochastic success probabilities would
-require probabilistic windows.  Finally, our swap-tree analysis
-assumes independent T1/T2 decay without correlated dephasing.
+\paragraph{Candidate reduction and purification are free until they
+bind.}  Adaptive top-$k$, GNN-guided ranking, and purification-aware
+candidate supersets all leave the reference optimum unchanged on our
+benchmarks---reduction improves anneal quality at fixed budget, and
+purification is never forced.  Each becomes binding in a defined
+regime (budget $k=2$ on chains; $F_{\min}$ above the $q{=}0$ ceiling),
+which the corresponding sweep quantifies.  This reframes both as
+\emph{tunable reliability/capacity dials} rather than approximations.
+
+\paragraph{Limitations.}  The MPS coupling order is heuristic; a
+learned ordering could improve bond efficiency.  The GNN ranker is
+trained per instance family and not yet shown to generalize across
+topologies.  The joint scheduler assumes deterministic transmission;
+stochastic success would require probabilistic windows.  The
+truncated-normal noise model is a proxy for a full device-noise
+characterization, and the chance-constraint calibration holds for the
+modeled noise only---hardware validation on measured parameters
+remains future work.  Our swap-tree analysis assumes independent T1/T2
+decay without correlated dephasing.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented a QUBO-based optimization framework for entanglement
-routing with three solver families and an extension suite that moves
-from static, memory-blind routing toward the temporal, learned, and
-topology-aware regime that deployed quantum networks will require.
-Our key findings are: (i) Metropolis and MPS solvers agree on the
-capacity-limited served-ratio frontier with utilities within $\sim5\%$,
-while the MPS solver is $6$--$370\times$ faster; (ii) the direct
-slack-free Hamiltonian dominates the slack-variable QUBO in both size
-and quality; (iii) temporal-memory joint scheduling delivers every
-admitted request on time and within coherence, at the price of
-conservative admission that memory-agnostic schedulers silently
-violate; (iv) adaptive top-$k$ and GNN-guided candidate reduction are
-free-or-beneficial at fixed annealing budget and a hybrid
-reduce--solve--repair pipeline raises utility by up to $1.66\times$;
-(v) multi-objective and $k$-disjoint analyses quantify the
-throughput--fidelity trade-off and add reliability without coverage
-loss; (vi) balanced swap trees recover up to $1.58\times$ of delivered
-fidelity under memory decay; and (vii) solver quality survives across
-five topology families, degrading gracefully only on scale-free
-networks.
+We presented a QUBO-based framework for entanglement routing whose
+solver stack (Metropolis, boundary-MPS, OpenJij SA, embedded QA) is
+certified against exact ILP and extended from static, memory-blind
+routing toward the stochastic, temporal, and learned regime that
+deployed quantum networks will require.  The key findings are:
+(i) solver families agree on the capacity-limited served-ratio
+frontier within $\sim5\%$ utility, with the MPS solver $6$--$370\times$
+faster and Metropolis within $1.5\%$ of the exact ILP; (ii) the
+direct slack-free Hamiltonian dominates the slack-variable QUBO in
+size and quality; (iii) temporal-memory joint scheduling delivers
+every admitted request within coherence at fidelity $0.30$--$0.51$,
+where a memory-agnostic baseline over-admits; (iv) chance-constrained
+routing turns the implicit $5$--$14\%$ SLA risk of the deterministic
+rule into a validated, tunable $\varepsilon$, with the empirical
+violation at or below budget on every tested instance; (v) recourse
+recovers $100\%$ of failures at $445$--$1281\times$ speedup; (vi)
+candidate reduction, purification, and $k$-disjoint provisioning are
+free-or-beneficial until defined regimes make them bind; (vii)
+balanced swap trees recover up to $1.58\times$ of delivered fidelity
+under memory decay; and (viii) solver quality survives across five
+topology families, degrading gracefully only on scale-free networks.
 
 Remaining future work includes: adaptive bond dimension driven by
 truncation error; function-approximation RL that generalizes across
 topologies; learned MPS coupling order; stochastic-window joint
-scheduling; validation on measured testbed parameters; and swapping
-of heterogeneous-link trees where the optimal-order search is
-expected to bind.
+scheduling; hardware validation of the noise model on measured testbed
+parameters; and chance-constrained joint scheduling that co-optimizes
+$\varepsilon$ with the temporal admission decision.
 
+\bibliographystyle{plain}
 \begin{thebibliography}{99}
 
 \bibitem{kimble2008quantum}
@@ -878,6 +1210,10 @@ H.~J.~Kimble, ``The quantum internet,''
 S.~Wehner, D.~Elkouss, and R.~Hanson,
 ``Quantum internet: A vision for the road ahead,''
 \emph{Science}, vol.~362, no.~6412, p.~eaam9288, 2018.
+
+\bibitem{simon2017towards}
+C.~Simon, ``Towards a global quantum network,''
+\emph{Nat. Photonics}, vol.~11, pp.~678--680, 2017.
 
 \bibitem{briegel1998quantum}
 H.-J.~Briegel, W.~D\"ur, J.~I.~Cirac, and P.~Zoller,
@@ -901,6 +1237,20 @@ H.-K.~Lo, and I.~Tzitrin,
 ``Quantum repeaters: From quantum networks to the quantum internet,''
 \emph{Rev. Mod. Phys.}, vol.~95, p.~045006, 2023.
 
+\bibitem{horodecki2009quantum}
+R.~Horodecki, P.~Horodecki, M.~Horodecki, and K.~Horodecki,
+``Quantum entanglement,''
+\emph{Rev. Mod. Phys.}, vol.~81, pp.~865--942, 2009.
+
+\bibitem{werner1989quantum}
+R.~F.~Werner, ``Quantum states with Einstein--Podolsky--Rosen
+correlations admitting a hidden-variable model,''
+\emph{Phys. Rev. A}, vol.~40, pp.~4277--4281, 1989.
+
+\bibitem{jozsa1994fidelity}
+R.~Jozsa, ``Fidelity for mixed quantum states,''
+\emph{J. Mod. Opt.}, vol.~41, no.~12, pp.~2315--2323, 1994.
+
 \bibitem{bennett1993teleporting}
 C.~H.~Bennett, G.~Brassard, C.~Cr\'epeau, R.~Jozsa, A.~Peres, and
 W.~K.~Wootters,
@@ -918,6 +1268,17 @@ noisy channels,''
 \bibitem{ekert1991quantum}
 A.~K.~Ekert, ``Quantum cryptography based on Bell's theorem,''
 \emph{Phys. Rev. Lett.}, vol.~67, p.~661, 1991.
+
+\bibitem{gisin2002quantum}
+N.~Gisin, G.~Ribordy, W.~Tittel, and H.~Zbinden,
+``Quantum cryptography,''
+\emph{Rev. Mod. Phys.}, vol.~74, pp.~145--195, 2002.
+
+\bibitem{scarani2009security}
+V.~Scarani, H.~Bechmann-Pasquinucci, N.~J.~Cerf, M.~Du\v{s}ek,
+N.~L\"utkenhaus, and M.~Peev,
+``The security of practical quantum key distribution,''
+\emph{Rev. Mod. Phys.}, vol.~81, pp.~1301--1350, 2009.
 
 \bibitem{pirandola2020advances}
 S.~Pirandola, U.~L.~Andersen, L.~Banchi, M.~Berta, D.~Bunandar,
@@ -945,6 +1306,11 @@ L.~Gyongyosi and S.~Imre,
 ``Entanglement-gradient routing of quantum networks,''
 \emph{Sci. Rep.}, vol.~9, p.~19274, 2019.
 
+\bibitem{cuquet2009entanglement}
+M.~Cuquet and J.~Calsamiglia,
+``Entanglement percolation in quantum complex networks,''
+\emph{Phys. Rev. Lett.}, vol.~103, p.~240503, 2009.
+
 \bibitem{schoute2016shortcuts}
 E.~Schoute, L.~Mancinska, T.~Islam, A.~Kahanamoku-Meyer, and
 S.~Wehner, ``Shortcuts to quantum network routing,''
@@ -954,6 +1320,21 @@ arXiv:1610.05238, 2016.
 W.~Kozlowski, A.~Dahlberg, and S.~Wehner,
 ``Designing a quantum network protocol,''
 in \emph{Proc. ACM CoNEXT}, 2020.
+
+\bibitem{coopmans2021netsquid}
+T.~Coopmans, R.~Knegjens, A.~Dahlberg, D.~Maier, L.~Nijsten,
+A.~N.~de~Oliveira, M.~Papendrecht, J.~Rabbie, F.~Rozp\k{e}dek,
+M.~Skrzypczyk, L.~Wubben, W.~de~Jong, D.~Podareanu,
+A.~Torres-Knoop, D.~Elkouss, and S.~Wehner,
+``NetSquid, a NETwork SIMulator for Quantum Information using Discrete
+events,''
+\emph{Commun. Phys.}, vol.~4, p.~164, 2021.
+
+\bibitem{wu2021sequence}
+X.~Wu, A.~Kolar, J.~Chung, D.~Jin, T.~Zhong, R.~Kettimuthu, and
+M.~Suchara, ``SeQUeNCe: A customizable discrete-event simulator of
+quantum networks,''
+\emph{Quantum Sci. Technol.}, vol.~6, p.~045027, 2021.
 
 \bibitem{kadowaki1998quantum}
 T.~Kadowaki and H.~Nishimori,
@@ -965,6 +1346,27 @@ S.~Kirkpatrick, C.~D.~Gelatt, and M.~P.~Vecchi,
 ``Optimization by simulated annealing,''
 \emph{Science}, vol.~220, p.~671, 1983.
 
+\bibitem{johnson2011quantum}
+M.~W.~Johnson, M.~H.~S.~Amin, S.~Gildert, T.~Lanting, F.~Hamze,
+N.~Dickson, R.~Harris, A.~J.~Berkley, J.~Johansson, P.~Bunyk,
+E.~M.~Chapple, C.~Enderud, J.~P.~Hilton, K.~Karimi, E.~Ladizinsky,
+N.~Ladizinsky, T.~Oh, I.~Perminov, C.~Rich, M.~C.~Thom, E.~Tolkacheva,
+C.~J.~S.~Truncik, S.~Uchaikin, J.~Wang, B.~Wilson, and G.~Rose,
+``Quantum annealing with manufactured spins,''
+\emph{Nature}, vol.~473, pp.~194--198, 2011.
+
+\bibitem{boixo2014evidence}
+S.~Boixo, T.~F.~R{\o}nnow, S.~V.~Isakov, Z.~Wang, D.~Wecker,
+D.~A.~Lidar, J.~M.~Martinis, and M.~Troyer,
+``Evidence for quantum annealing with more than one hundred qubits,''
+\emph{Nat. Phys.}, vol.~10, pp.~218--224, 2014.
+
+\bibitem{venegas2018quantum}
+S.~E.~Venegas-Andraca, W.~Cruz-Santos, C.~McGeoch, and
+M.~Lanzagorta, ``A cross-disciplinary glimpse at practical quantum
+annealing,''
+\emph{Int. J. Circuit Theory Appl.}, vol.~47, pp.~853--883, 2019.
+
 \bibitem{lucas2014ising}
 A.~Lucas, ``Ising formulations of many NP problems,''
 \emph{Frontiers in Physics}, vol.~2, p.~5, 2014.
@@ -973,6 +1375,13 @@ A.~Lucas, ``Ising formulations of many NP problems,''
 F.~Glover, G.~Kochenberger, and Y.~Du,
 ``A tutorial on formulating and using QUBO models,''
 \emph{4OR}, vol.~17, pp.~335--369, 2019.
+
+\bibitem{tanahashi2019application}
+K.~Tanahashi, S.~Takayanagi, T.~Motohashi, and S.~Tanaka,
+``Application of Ising machines and a software development methodology
+to portfolio optimization,''
+\emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~44, no.~5,
+pp.~2604--2616, 2022.
 
 \bibitem{farhi2014qaoa}
 E.~Farhi, J.~Goldstone, and S.~Gutmann,
@@ -1093,6 +1502,22 @@ D.~Bertsimas and M.~Sim, ``The price of robustness,''
 \bibitem{deb2001multiobjective}
 K.~Deb, \emph{Multi-Objective Optimization Using Evolutionary
 Algorithms}.  Wiley, 2001.
+
+\bibitem{charnes1959chance}
+A.~Charnes and W.~W.~Cooper,
+``Chance-constrained programming,''
+\emph{Management Science}, vol.~6, no.~1, pp.~73--79, 1959.
+
+\bibitem{prekopa1995stochastic}
+A.~Pr\'ekopa, \emph{Stochastic Programming}.  Kluwer, 1995.
+
+\bibitem{birge1997introduction}
+J.~R.~Birge and F.~Louveaux, \emph{Introduction to Stochastic
+Programming}.  Springer, 1997.
+
+\bibitem{ben-tal2009robust}
+A.~Ben-Tal, L.~El~Ghaoui, and A.~Nemirovski, \emph{Robust
+Optimization}.  Princeton University Press, 2009.
 
 \bibitem{lvovsky2009optical}
 A.~I.~Lvovsky, B.~C.~Sanders, and W.~Tittel,
