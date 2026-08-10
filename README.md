@@ -215,8 +215,14 @@ bundle interface:
 | `routing/temporal_request.py`, `routing/memory_scheduler.py` | Time-aware requests (arrival/deadline/priority) and a temporal memory scheduler with fidelity decay and T1/T2 windows |
 | `optimization/joint_scheduler.py`, `optimization/online_optimizers.py` | Joint routing + temporal-memory scheduling vs memory-agnostic baselines; static / online / receding-horizon regimes |
 | `baselines/gnn_ranker.py` | GraphSAGE candidate ranker that scores bundles from graph features and feeds a feasibility-aware greedy / QUBO decode |
+| `simulation/discrete_event_engine.py` | Stochastic discrete-event engine that samples the entanglement pipeline (generation, swapping, purification, delivery) and reports sampled vs parametric utility and SLA statistics |
+| `simulation/recourse.py` | Adaptive recourse: local repair of failed requests vs full reoptimization, with recovery-rate and wall-time speedup |
+| `optimization/purification_scheduler.py` | Purification as a first-class variable: joint fidelity/memory purification scheduling vs entanglement-only provisioning, plus cost/fidelity sweeps |
+| `experiments/optimality_benchmark.py` | Exact-ILP optimality-gap certification and parametric-vs-sampled stochastic reliability benchmarks |
+| `optimization/adaptive_budget.py` | Congestion/density-driven adaptive QUBO candidate budget vs fixed top-k and full-candidate baselines |
+| `optimization/quantum_annealing_backend.py` | Quantum-annealing backend: minor-embedding onto a hardware lattice, PIA sampler with chain-break-aware decode, compared against SA/SQA |
 
-**Run the full experiment battery** (writes ~33 CSVs to `results/experiments/`):
+**Run the full experiment battery** (writes ~41 CSVs to `results/experiments/`):
 
 ```bash
 PYTHONPATH=src python3 src/experiments/experiment_suite.py
@@ -231,7 +237,10 @@ PYTHONPATH=src python3 src/experiments/plot_results.py
 
 Each `extensions/` module and the temporal/joint scheduling stack is covered
 by unit tests under `tests/` (`test_extensions_*.py`, `test_joint_scheduling.py`,
-`test_adaptive_qubo.py`, `test_hybrid_pipeline.py`, `test_gnn_ranker.py`).
+`test_adaptive_qubo.py`, `test_hybrid_pipeline.py`, `test_gnn_ranker.py`,
+`test_discrete_event_simulation.py`, `test_recourse.py`,
+`test_purification_scheduler.py`, `test_optimality_benchmark.py`,
+`test_adaptive_budget.py`, `test_quantum_annealing_backend.py`).
 
 ## Physics notes
 

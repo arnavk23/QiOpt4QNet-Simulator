@@ -722,6 +722,155 @@ def run_topology_evolution_experiments():
     _write_rows(rows, "topology_evolution.csv")
 
 
+def run_des_reliability_experiments():
+    """Wave 3: discrete-event stochastic simulation of solver plans.
+
+    Evaluate Metropolis plans through the event engine under a
+    tau_mem x swap_success grid; report sampled vs parametric utility
+    and SLA statistics."""
+    from experiments.benchmark import build_metropolis
+    from simulation.discrete_event_engine import StochasticEventSimulator
+
+    rows = []
+    for n_req in [6, 10]:
+        topo = generate_chain_topology(n_nodes=10, edge_capacity=8,
+                                       memory_capacity=12, raw_fidelity=0.85)
+        inst = contention_sweep_instances(lambda: topo, [n_req],
+                                          seed=42)["n%d" % n_req]
+        b, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
+        sf = build_metropolis(b, ec, mc, seed=42)
+        r = sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+               max_iterations=3000)
+        for tau_mem in [5.0, 50.0]:
+            for swap_success in [0.90, 0.95, 1.0]:
+                sim = StochasticEventSimulator(topo, tau_mem=tau_mem,
+                                               swap_success=swap_success, seed=42)
+                agg = sim.simulate_plan(b, r["selected"], n_realizations=40)
+                rows.append({
+                    "n_requests": n_req,
+                    "tau_mem": tau_mem,
+                    "swap_success": swap_success,
+                    "n_selected": len(r["selected"]),
+                    "param_expected_utility": agg["param_expected_utility"],
+                    "e_utility": agg["e_utility"],
+                    "utility_gap": agg["utility_gap"],
+                    "served_ratio": agg["served_ratio"],
+                    "sla_violation_prob": agg["sla_violation_prob"],
+                    "e_delivered_fidelity": agg["e_delivered_fidelity"],
+                    "e_latency": agg["e_latency"],
+                    "n_realizations": agg["n_realizations"],
+                })
+    _write_rows(rows, "des_reliability.csv")
+
+
+def run_purification_experiments():
+    """Wave 3: purification as a first-class optimization variable.
+
+    Joint fidelity/memory purification scheduling vs entanglement-only
+    provisioning, plus a path-length / fidelity cost trade-off sweep."""
+    from optimization.purification_scheduler import (
+        run_purification_comparison, run_purification_sweep,
+    )
+
+    rows = []
+    for n_req in [6, 10]:
+        topo = generate_chain_topology(n_nodes=10, edge_capacity=6,
+                                       memory_capacity=10, raw_fidelity=0.85)
+        res = run_purification_comparison(topo, n_requests=n_req, q_max=4, seed=42)
+        rows.extend([{"n_requests": n_req, **r} for r in res["rows"]])
+    _write_rows(rows, "purification_comparison.csv")
+    _write_rows(run_purification_sweep(path_lengths=[3, 4, 5, 6], q_max=4,
+                                       min_fidelity_values=[0.5, 0.7, 0.9]),
+                "purification_sweep.csv")
+
+
+def run_recourse_experiments():
+    """Wave 3: adaptive recourse — local repair versus full reoptimization.
+
+    Compare how often each failed request is recovered by local repair
+    versus full replan, and the wall-time speedup."""
+    from simulation.recourse import run_recourse_comparison
+
+    rows, summary = [], []
+    for n_req in [6, 10]:
+        topo = generate_chain_topology(n_nodes=10, edge_capacity=6,
+                                       memory_capacity=10, raw_fidelity=0.85)
+        res = run_recourse_comparison(topo, n_requests=n_req, n_realizations=20,
+                                      seed=42, tau_mem=50.0, swap_success=0.95)
+        rows.extend([{"n_requests": n_req, **r} for r in res["rows"]])
+        summary.append({
+            "n_requests": n_req,
+            "n_realizations": res["n_realizations"],
+            "plan0_utility": res["plan0_utility"],
+            "plan0_time_s": res["plan0_time_s"],
+            "mean_failed_per_realization": res["mean_failed_per_realization"],
+            "mean_t_local_s": res["mean_t_local_s"],
+            "mean_t_full_s": res["mean_t_full_s"],
+            "speedup": res["speedup"],
+            "mean_u_local": res["mean_u_local"],
+            "mean_u_full": res["mean_u_full"],
+            "mean_recovery_rate": res["mean_recovery_rate"],
+            "lost_utility_recovered_frac": res["lost_utility_recovered_frac"],
+        })
+    _write_rows(rows, "recourse_comparison.csv")
+    _write_rows(summary, "recourse_summary.csv")
+
+
+def run_optimality_experiments():
+    """Wave 3: optimality-gap certification and stochastic reliability.
+
+    Exact-ILP gap study across request counts, and parametric vs
+    sampled reliability of solver plans under fidelity decay."""
+    from experiments.optimality_benchmark import (
+        run_gap_study, run_stochastic_reliability_benchmark,
+    )
+
+    topo_fn = lambda: generate_chain_topology(n_nodes=8, edge_capacity=6,
+                                              memory_capacity=10)
+    gap_rows = run_gap_study(topo_fn, sizes=[4, 6, 8], n_instances=4,
+                             seed=42, time_limit=30.0)
+    _write_rows(gap_rows, "optimality_gap.csv")
+
+    rows = []
+    for n_req in [6, 10]:
+        topo = generate_chain_topology(n_nodes=10, edge_capacity=8,
+                                       memory_capacity=12, raw_fidelity=0.85)
+        res = run_stochastic_reliability_benchmark(topo, n_requests=n_req,
+                                                   n_realizations=40, seed=42,
+                                                   tau_mem=50.0, swap_success=0.95)
+        rows.extend(res["rows"])
+    _write_rows(rows, "stochastic_reliability.csv")
+
+
+def run_adaptive_budget_experiments():
+    """Wave 3: adaptive QUBO candidate budget.
+
+    Congestion/density-driven top-k budget vs fixed budgets and the
+    full-candidate QUBO reference."""
+    from optimization.adaptive_budget import run_adaptive_budget_study
+
+    topo_fn = lambda: generate_chain_topology(n_nodes=10, edge_capacity=6,
+                                              memory_capacity=10)
+    res = run_adaptive_budget_study(topo_fn, n_requests_list=[8, 12],
+                                    k_values=[2, 4, 6, 8], num_reads=20,
+                                    solver="metropolis", seed=42)
+    _write_rows(res["rows"], "adaptive_budget.csv")
+
+
+def run_quantum_annealing_experiments():
+    """Wave 3: quantum-annealing backend comparison.
+
+    Minor-embedded QA (PIA sampler) vs simulated annealing and SQA on
+    identical QUBO instances; reports qubits used and chain statistics."""
+    from optimization.quantum_annealing_backend import run_quantum_annealing_sweep
+
+    topo_fn = lambda: generate_chain_topology(n_nodes=8, edge_capacity=6,
+                                              memory_capacity=10)
+    res = run_quantum_annealing_sweep(topo_fn, n_requests_list=[4, 6, 8],
+                                      num_reads=20, num_sweeps=200, k=8, seed=42)
+    _write_rows(res["rows"], "quantum_annealing_sweep.csv")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("  Paper experiment sweep")
@@ -771,6 +920,24 @@ if __name__ == "__main__":
 
     print("\n15. Topology evolution (E13): chain vs ring vs G(n,p) vs small-world vs scale-free...")
     run_topology_evolution_experiments()
+
+    print("\n16. DES (Wave 3): stochastic reliability of solver plans...")
+    run_des_reliability_experiments()
+
+    print("\n17. Purification (Wave 3): purification as a first-class variable...")
+    run_purification_experiments()
+
+    print("\n18. Adaptive recourse (Wave 3): local repair vs full reoptimization...")
+    run_recourse_experiments()
+
+    print("\n19. Optimality certification (Wave 3): exact-ILP gap + stochastic reliability...")
+    run_optimality_experiments()
+
+    print("\n20. Adaptive budget (Wave 3): candidate-space budget control...")
+    run_adaptive_budget_experiments()
+
+    print("\n21. Quantum annealing backend (Wave 3): embedded QA vs SA/SQA...")
+    run_quantum_annealing_experiments()
 
     print(f"\nAll results in {OUT}/")
 

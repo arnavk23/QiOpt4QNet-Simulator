@@ -1064,6 +1064,248 @@ def fig_topology_evolution():
     print(f"Saved {path}")
 
 
+def fig_des_reliability():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "des_reliability.csv"))
+    tau_mems = sorted(set(r["tau_mem"] for r in rows), key=float)
+    colors = plt.cm.tab10(np.linspace(0, 1, len(tau_mems)))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    for i, tm in enumerate(tau_mems):
+        sub = [r for r in rows if r["tau_mem"] == tm]
+        served = {float(k): v for k, v in _agg(sub, "swap_success", "served_ratio").items()}
+        gap = {float(k): v for k, v in _agg(sub, "swap_success", "utility_gap").items()}
+        xs = sorted(served)
+        ax1.plot(xs, [served[x] for x in xs], "o-", color=colors[i], label=f"tau_mem={tm}")
+        ax2.plot(xs, [gap[x] for x in xs], "s--", color=colors[i], label=f"tau_mem={tm}")
+    ax1.set_xlabel("Swap success probability")
+    ax1.set_ylabel("Sampled served ratio")
+    ax1.set_ylim(0, 1.1)
+    ax1.set_title("DES: delivered request ratio")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3, axis="y")
+    ax2.set_xlabel("Swap success probability")
+    ax2.set_ylabel("E[U] parametric $-$ sampled")
+    ax2.set_title("DES: parametric vs sampled utility gap")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(OUT, "des_reliability.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
+def fig_purification():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "purification_comparison.csv"))
+    sweep = _load(os.path.join(DATA, "purification_sweep.csv"))
+    regimes = ["purification_agnostic", "default_q012", "purification_aware"]
+    regimes = [rg for rg in regimes if rg in {r["regime"] for r in rows}]
+    colors = plt.cm.tab10(np.linspace(0, 1, len(regimes)))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    ns = sorted(set(int(r["n_requests"]) for r in rows))
+    x = range(len(ns))
+    width = 0.8 / max(len(regimes), 1)
+    for i, rg in enumerate(regimes):
+        vals = []
+        for n in ns:
+            sub = [r for r in rows if r["regime"] == rg and int(r["n_requests"]) == n]
+            vals.append(sum(float(r["served_ratio"]) for r in sub) / max(len(sub), 1))
+        ax1.bar([xi + (i - len(regimes) / 2) * width for xi in x], vals, width,
+                label=rg, color=colors[i], alpha=0.85)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels([f"N={n}" for n in ns])
+    ax1.set_ylabel("Served ratio")
+    ax1.set_ylim(0, 1.1)
+    ax1.set_title("Purification regime: served ratio")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    plens = sorted(set(int(r["path_length"]) for r in sweep))
+    for pl in plens:
+        sub = [r for r in sweep if int(r["path_length"]) == pl]
+        sub.sort(key=lambda r: float(r["fidelity"]))
+        ax2.plot([float(r["fidelity"]) for r in sub],
+                 [float(r["bell_pair_cost"]) for r in sub],
+                 "o-", label=f"path={pl}")
+    ax2.set_xlabel("Delivered fidelity")
+    ax2.set_ylabel("Bell-pair cost (purification rounds)")
+    ax2.set_title("Fidelity vs purification cost")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(OUT, "purification.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
+def fig_recourse():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "recourse_comparison.csv"))
+    summary = _load(os.path.join(DATA, "recourse_summary.csv"))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    for n in sorted(set(int(r["n_requests"]) for r in rows)):
+        sub = [r for r in rows if int(r["n_requests"]) == n]
+        ax1.scatter([float(r["n_failed"]) for r in sub],
+                    [float(r["n_local_recovered"]) for r in sub],
+                    s=36, alpha=0.8, label=f"N={n}")
+    lim = max(float(r["n_failed"]) for r in rows) * 1.1
+    ax1.plot([0, lim], [0, lim], "k--", alpha=0.4)
+    ax1.set_xlabel("Requests failed per realization")
+    ax1.set_ylabel("Requests recovered by local repair")
+    ax1.set_title("Adaptive recourse: local repair recovery")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3)
+
+    ns = [int(r["n_requests"]) for r in summary]
+    speedup = [float(r["speedup"]) for r in summary]
+    recovery = [float(r["mean_recovery_rate"]) for r in summary]
+    x = range(len(ns))
+    ax2.bar([xi - 0.18 for xi in x], speedup, 0.36, label="speedup (t_full/t_local)", alpha=0.85)
+    ax2.bar([xi + 0.18 for xi in x], recovery, 0.36, label="mean recovery rate", alpha=0.85)
+    ax2.set_xticks(list(x))
+    ax2.set_xticklabels([f"N={n}" for n in ns])
+    ax2.set_ylabel("Ratio")
+    ax2.set_title("Recourse: local-repair speedup and recovery")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+    path = os.path.join(OUT, "recourse.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
+def fig_optimality_gap():
+    if not HAS_MPL:
+        return
+    gap_rows = _load(os.path.join(DATA, "optimality_gap.csv"))
+    rel_rows = _load(os.path.join(DATA, "stochastic_reliability.csv"))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    solvers = sorted(set(r["solver"] for r in gap_rows))
+    ns = sorted(set(int(r["n_requests"]) for r in gap_rows))
+    x = range(len(ns))
+    width = 0.8 / max(len(solvers), 1)
+    for i, s in enumerate(solvers):
+        vals = []
+        for n in ns:
+            sub = [r for r in gap_rows if r["solver"] == s and int(r["n_requests"]) == n]
+            vals.append(sum(float(r["gap_rel"]) for r in sub) / max(len(sub), 1))
+        ax1.bar([xi + (i - len(solvers) / 2) * width for xi in x], vals, width,
+                label=s, alpha=0.85)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels([f"N={n}" for n in ns])
+    ax1.set_ylabel("Mean relative gap vs exact ILP")
+    ax1.set_title("Optimality-gap certification")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    rel_solvers = sorted(set(r["solver"] for r in rel_rows))
+    rel_ns = sorted(set(int(r["n_requests"]) for r in rel_rows))
+    x2 = range(len(rel_ns))
+    for i, s in enumerate(rel_solvers):
+        vals = []
+        for n in rel_ns:
+            sub = [r for r in rel_rows if r["solver"] == s and int(r["n_requests"]) == n]
+            vals.append(sum(float(r["reliability_gap"]) for r in sub) / max(len(sub), 1))
+        ax2.bar([xi + (i - len(rel_solvers) / 2) * width for xi in x2], vals, width,
+                label=s, alpha=0.85)
+    ax2.set_xticks(list(x2))
+    ax2.set_xticklabels([f"N={n}" for n in rel_ns])
+    ax2.set_ylabel("Reliability gap (E[U] param $-$ sampled)")
+    ax2.set_title("Stochastic reliability of solver plans")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+    path = os.path.join(OUT, "optimality_gap.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
+def fig_adaptive_budget():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "adaptive_budget.csv"))
+    ns = sorted(set(int(r["n_requests"]) for r in rows))
+    kvals = sorted(set(int(r["k"]) for r in rows if r["method"].startswith("k")))
+    colors = plt.cm.tab10(np.linspace(0, 1, len(ns)))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    for i, n in enumerate(ns):
+        sub = [r for r in rows if int(r["n_requests"]) == n and r["method"].startswith("k")]
+        sub.sort(key=lambda r: int(r["k"]))
+        ax1.plot([int(r["k"]) for r in sub], [float(r["utility"]) for r in sub],
+                 "o-", color=colors[i], label=f"N={n}")
+        ad = [r for r in rows if int(r["n_requests"]) == n and r["method"] == "adaptive"]
+        if ad:
+            ax1.axhline(float(ad[0]["utility"]), color=colors[i], ls=":", alpha=0.6)
+        ax2.plot([int(r["k"]) for r in sub],
+                 [100 * float(r["relative_gap_vs_full"]) for r in sub],
+                 "s--", color=colors[i], label=f"N={n}")
+    ax1.set_xlabel("Top-k candidate budget")
+    ax1.set_ylabel("Utility (dashed: adaptive)")
+    ax1.set_title("Adaptive budget: utility vs fixed k")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3)
+    ax2.set_xlabel("Top-k candidate budget")
+    ax2.set_ylabel("Relative utility gap vs full QUBO (%)")
+    ax2.set_title("Adaptive budget: gap to full candidate set")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    path = os.path.join(OUT, "adaptive_budget.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
+def fig_quantum_annealing():
+    if not HAS_MPL:
+        return
+    rows = _load(os.path.join(DATA, "quantum_annealing_sweep.csv"))
+    ns = sorted(set(int(r["n_requests"]) for r in rows))
+    x = range(len(ns))
+    width = 0.25
+    backends = [("QA (embedded PIA)", "qa_utility", "#c44e52"),
+                ("SA (openjij)", "sa_utility", "#4c72b0"),
+                ("SQA (openjij)", "sqa_utility", "#55a868")]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.6))
+    for i, (label, key, color) in enumerate(backends):
+        vals = [float([r for r in rows if int(r["n_requests"]) == n][0][key]) for n in ns]
+        ax1.bar([xi + (i - 1) * width for xi in x], vals, width,
+                label=label, color=color, alpha=0.85)
+    ax1.set_xticks(list(x))
+    ax1.set_xticklabels([f"N={n}" for n in ns])
+    ax1.set_ylabel("Utility")
+    ax1.set_title("Embedded QA vs SA / SQA")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    qubits = [float([r for r in rows if int(r["n_requests"]) == n][0]["qa_n_qubits"]) for n in ns]
+    ax2.bar(x, qubits, 0.5, alpha=0.85)
+    for xi, q in zip(x, qubits):
+        ax2.text(xi, q, f"{int(q)}", ha="center", va="bottom", fontsize=8)
+    ax2.set_xticks(list(x))
+    ax2.set_xticklabels([f"N={n}" for n in ns])
+    ax2.set_ylabel("Hardware qubits (minor-embedded)")
+    ax2.set_title("QA embedding resource use")
+    ax2.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+    path = os.path.join(OUT, "quantum_annealing.png")
+    plt.savefig(path, dpi=150)
+    plt.close()
+    print(f"Saved {path}")
+
+
 if __name__ == "__main__":
     print("Generating figures...")
     fig_contention_scaling()
@@ -1088,6 +1330,12 @@ if __name__ == "__main__":
     fig_disjoint_paths()
     fig_swapping_order()
     fig_topology_evolution()
+    fig_des_reliability()
+    fig_purification()
+    fig_recourse()
+    fig_optimality_gap()
+    fig_adaptive_budget()
+    fig_quantum_annealing()
     print("\nGenerating tables...")
     generate_tables()
     print(f"\nAll outputs in {OUT}/")
