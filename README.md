@@ -198,6 +198,52 @@ encoder (GraphSAGE/GAT) over network structure eventually — swap it in for
 `feasibility_aware_decode` only needs a `{(request_id, bundle_id): score}`
 mapping regardless of how the scores were produced.
 
+## Extensions and the experiment suite
+
+Beyond the core solver layers, `src/extensions/` and `src/routing/` +
+`src/optimization/` hold paper-style extensions that plug into the same
+bundle interface:
+
+| Module | Extension |
+|---|---|
+| `extensions/adaptive_qubo.py` | Adaptive candidate reduction: keep the top-`k` bundles per request (by fidelity/congestion filters) before building and annealing the QUBO, then compare against the full-size reference QUBO |
+| `extensions/hybrid_pipeline.py` | Hybrid pipeline: candidate reduction → small QUBO solve → feasibility repair/refine, benchmarked against QUBO-only ablations |
+| `extensions/multi_objective.py` | Multi-objective selection: throughput/fidelity/success/latency/memory trade-offs via Pareto-frontier enumeration and `ε`-constraint queries |
+| `extensions/disjoint_paths.py` | `k`-disjoint-path provisioning: composite bundles over edge-disjoint routes with success-probability redundancy |
+| `extensions/swapping_order.py` | Entanglement-swap-tree ordering (linear / balanced / optimal) under T1/T2 memory decay and fidelity-vs-`τ_mem` sweeps |
+| `extensions/topologies.py` | Generative topology families (ring, random-geometric, Erdős–Rényi, Watts–Strogatz, Barabási–Albert) to test solver robustness to network shape |
+| `routing/temporal_request.py`, `routing/memory_scheduler.py` | Time-aware requests (arrival/deadline/priority) and a temporal memory scheduler with fidelity decay and T1/T2 windows |
+| `optimization/joint_scheduler.py`, `optimization/online_optimizers.py` | Joint routing + temporal-memory scheduling vs memory-agnostic baselines; static / online / receding-horizon regimes |
+| `baselines/gnn_ranker.py` | GraphSAGE candidate ranker that scores bundles from graph features and feeds a feasibility-aware greedy / QUBO decode |
+| `simulation/discrete_event_engine.py` | Stochastic discrete-event engine that samples the entanglement pipeline (generation, swapping, purification, delivery) and reports sampled vs parametric utility and SLA statistics |
+| `simulation/recourse.py` | Adaptive recourse: local repair of failed requests vs full reoptimization, with recovery-rate and wall-time speedup |
+| `optimization/purification_scheduler.py` | Purification as a first-class variable: joint fidelity/memory purification scheduling vs entanglement-only provisioning, plus cost/fidelity sweeps |
+| `experiments/optimality_benchmark.py` | Exact-ILP optimality-gap certification and parametric-vs-sampled stochastic reliability benchmarks |
+| `optimization/adaptive_budget.py` | Congestion/density-driven adaptive QUBO candidate budget vs fixed top-k and full-candidate baselines |
+| `optimization/quantum_annealing_backend.py` | Quantum-annealing backend: minor-embedding onto a hardware lattice, PIA sampler with chain-break-aware decode, compared against SA/SQA |
+| `optimization/chance_constrained.py` | Chance-constrained routing: replaces the hard rule `F ≥ F_min` with the quantile constraint `P(F_r ≥ F_min) ≥ 1-ε` under truncated-normal fidelity noise; hard, chance(ε), and nominal policies solved by exact ILP and executed in the DES engine to certify that the empirical SLA stays ≤ ε |
+
+**Run the full experiment battery** (writes ~42 CSVs to `results/experiments/`):
+
+```bash
+PYTHONPATH=src python3 src/experiments/experiment_suite.py
+```
+
+**Regenerate all figures and summary tables** (writes PNGs + `summary_tables.txt`
+to `results/experiments/figures/`):
+
+```bash
+PYTHONPATH=src python3 src/experiments/plot_results.py
+```
+
+Each `extensions/` module and the temporal/joint scheduling stack is covered
+by unit tests under `tests/` (`test_extensions_*.py`, `test_joint_scheduling.py`,
+`test_adaptive_qubo.py`, `test_hybrid_pipeline.py`, `test_gnn_ranker.py`,
+`test_discrete_event_simulation.py`, `test_recourse.py`,
+`test_purification_scheduler.py`, `test_optimality_benchmark.py`,
+`test_adaptive_budget.py`, `test_quantum_annealing_backend.py`,
+`test_chance_constrained.py`).
+
 ## Physics notes
 
 - Fidelities are modeled as Werner-state parameters. Entanglement swapping

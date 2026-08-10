@@ -1,0 +1,9 @@
+constrain,maximize,target,feasible,achieved_constraint,achieved_maximized
+fidelity,throughput,0.4,True,0.7203999999999999,5
+fidelity,throughput,0.5,True,0.7203999999999999,5
+fidelity,throughput,0.6,True,0.7203999999999999,5
+fidelity,throughput,0.7,True,0.7203999999999999,5
+throughput,fidelity,0.4,True,1,0.9134033532472536
+throughput,fidelity,0.5,True,1,0.9134033532472536
+throughput,fidelity,0.6,True,1,0.9134033532472536
+throughput,fidelity,0.7,True,1,0.9134033532472536

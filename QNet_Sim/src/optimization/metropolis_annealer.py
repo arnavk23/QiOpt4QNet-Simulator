@@ -172,7 +172,7 @@ class MetropolisAnnealer:
 
         old_risk = self._memory_risk_of((rid, old_bid)) if old_bid is not None else 0.0
         new_risk = self._memory_risk_of((rid, new_bid)) if new_bid is not None else 0.0
-        delta += old_risk - new_risk
+        delta += new_risk - old_risk
 
         return delta
 

@@ -1,6 +1,6 @@
 import random
 import networkx as nx
-from itertools import combinations
+from itertools import combinations, islice
 from typing import Callable, Dict, List, Optional, Tuple
 
 
@@ -66,7 +66,7 @@ def _shortest_paths(topology: dict, source: str, target: str, k: int = 3):
     G.add_nodes_from(topology["nodes"])
     G.add_edges_from(topology["edges"])
     try:
-        return list(nx.shortest_simple_paths(G, source, target))[:k]
+        return list(islice(nx.shortest_simple_paths(G, source, target), k))
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return []
 
