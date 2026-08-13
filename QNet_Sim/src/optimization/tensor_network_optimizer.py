@@ -441,11 +441,18 @@ class TensorNetworkOptimizer:
     def _min_drop_for(self, rid, bid, selections, edge_load, mem_load):
         """Smallest-utility subset of served requests that must be dropped so
         that bundle ``bid`` of ``rid`` fits.  Returns the list of request ids."""
+        return self._min_drop_joint([(rid, bid)], selections, edge_load, mem_load)
+
+    def _min_drop_joint(self, bundles, selections, edge_load, mem_load):
+        """Smallest-utility subset of served requests that must be dropped so
+        that *all* ``(rid, bid)`` bundles in ``bundles`` fit jointly.  Returns
+        the list of request ids, or ``[]`` if none of the bundles need room."""
         needed = defaultdict(int)
-        for edge, d in self._edge_of.get((rid, bid), {}).items():
-            needed[edge] += d
-        for node, d in self._mem_of.get((rid, bid), {}).items():
-            needed[node] += d
+        for rid, bid in bundles:
+            for edge, d in self._edge_of.get((rid, bid), {}).items():
+                needed[edge] += d
+            for node, d in self._mem_of.get((rid, bid), {}).items():
+                needed[node] += d
 
         deficit = defaultdict(int)
         for e, d in needed.items():
@@ -474,16 +481,30 @@ class TensorNetworkOptimizer:
         # the drop only ever needs to free a handful of edges).  This finds
         # moves a greedy deficit-cover overshoots (e.g. dropping a request that
         # only touches an already-satisfied edge), which is what kept the swap
-        # pass from closing the gap to the annealer.
+        # pass from closing the gap to the annealer.  All bundles are checked
+        # against the *joint* post-drop loads (they may share constrained
+        # resources), mirroring the exact state after they are committed.  The
+        # lowest-utility feasible subset wins: a larger subset can be cheaper
+        # than the first feasible singleton (e.g. two low-value requests vs one
+        # mid-value one), and size-first enumeration would miss it.
+        best_combo = None
+        best_util = float("inf")
         for k in (1, 2, 3, 4):
             for combo in itertools.combinations(serving, min(k, len(serving))):
                 el = defaultdict(int, edge_load)
                 ml = defaultdict(int, mem_load)
                 for r in combo:
                     self._release(r, selections[r], el, ml)
-                if self._fits(rid, bid, el, ml):
-                    return list(combo)
-        return []
+                for rid, bid in bundles:
+                    self._commit(rid, bid, el, ml)
+                if all(el[e] <= self.edge_capacities.get(e, 0) for e in el) and \
+                   all(ml[nd] <= self.memory_capacities.get(nd, 0) for nd in ml):
+                    u = sum(self._util_of.get((r, selections[r]), 0.0)
+                            for r in combo)
+                    if u < best_util:
+                        best_util = u
+                        best_combo = combo
+        return list(best_combo) if best_combo is not None else []
 
     def _improve(self, selections, max_passes=5):
         """Deterministic add / drop / swap local search on top of the MPS
@@ -542,30 +563,25 @@ class TensorNetworkOptimizer:
                     ra, rb = unserved[a_idx], unserved[b_idx]
                     ba = max(self.bundles_per_request[ra], key=lambda x: x["utility"])
                     bb = max(self.bundles_per_request[rb], key=lambda x: x["utility"])
-                    joint = self._min_drop_for(
-                        ra, ba["bundle_id"], cur, edge_load, mem_load)
+                    joint = self._min_drop_joint(
+                        [(ra, ba["bundle_id"]), (rb, bb["bundle_id"])],
+                        cur, edge_load, mem_load)
                     if not joint:
                         continue
-                    el2 = defaultdict(int, edge_load)
-                    ml2 = defaultdict(int, mem_load)
+                    # Verify both bundles fit the post-drop loads together
+                    # (they are committed jointly and may share a constrained
+                    # edge, so a per-bundle check is not enough).
+                    el3 = defaultdict(int, edge_load)
+                    ml3 = defaultdict(int, mem_load)
                     for r in joint:
-                        self._release(r, cur[r], el2, ml2)
-                    if not self._fits(rb, bb["bundle_id"], el2, ml2):
-                        extra = self._min_drop_for(
-                            rb, bb["bundle_id"],
-                            {r: (cur[r] if r in cur else None) for r in cur},
-                            el2, ml2)
-                        # _min_drop_for expects selections over served requests;
-                        # only keep extras that are still served after the joint drop.
-                        extra = [r for r in extra if cur.get(r) is not None
-                                 and r not in joint]
-                        joint = joint + extra
-                        el3 = defaultdict(int, edge_load)
-                        ml3 = defaultdict(int, mem_load)
-                        for r in joint:
-                            self._release(r, cur[r], el3, ml3)
-                        if not self._fits(rb, bb["bundle_id"], el3, ml3):
-                            continue
+                        self._release(r, cur[r], el3, ml3)
+                    self._commit(ra, ba["bundle_id"], el3, ml3)
+                    self._commit(rb, bb["bundle_id"], el3, ml3)
+                    if not (all(el3[e] <= self.edge_capacities.get(e, 0)
+                                for e in el3) and
+                            all(ml3[nd] <= self.memory_capacities.get(nd, 0)
+                                for nd in ml3)):
+                        continue
                     drop_util = sum(self._util_of.get((r, cur[r]), 0.0)
                                     for r in joint)
                     gain = ba["utility"] + bb["utility"] - drop_util
