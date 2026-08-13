@@ -7,13 +7,28 @@ name = "qiopt4qnet"
 version = "0.1.0"
 description = "Quantum network optimization framework"
 dependencies = [
-    "simpy>=4.0",
-    "numpy",
-    "networkx",
-    "matplotlib",
-    "dimod",
-    "openjij",
-    "pyqubo"
+    "simpy==4.1.2",
+    "numpy==2.2.6",
+    "networkx==3.4.2",
+    "matplotlib==3.10.9",
+    "dimod==0.12.22",
+    "openjij==0.12.1",
+    "pyqubo==1.5.0",
+    "minorminer==0.2.22"
+]
+
+[project.optional-dependencies]
+baselines = [
+    "ortools==9.15.6755",     # exact CP-SAT oracle baseline
+    "scikit-learn==1.7.2"     # legacy ML bundle-ranking baseline
+]
+test = [
+    "pytest>=9"
+]
+all = [
+    "ortools==9.15.6755",
+    "scikit-learn==1.7.2",
+    "pytest>=9"
 ]
 
 [tool.pyright]

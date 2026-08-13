@@ -180,9 +180,6 @@ class ConstrainedTensorNetworkOptimizer:
                 t[b_idx, 0, 0] = np.exp(-beta * (e - e_min))
             mps.append(t)
 
-        best_selections = None
-        best_util = -1.0
-
         for _ in range(max_sweeps):
             for direction in ["left", "right"]:
                 if direction == "left":
@@ -192,57 +189,80 @@ class ConstrainedTensorNetworkOptimizer:
                     for i in range(n - 2, -1, -1):
                         self._contract_bond(mps, i, i + 1, bond_dim, beta, ordered, opt_maps)
 
-            selections, util = self._decode(mps, opt_maps, dims, ordered, beta)
-            if util > best_util:
-                best_util = util
-                best_selections = dict(selections)
-
-        selections = best_selections or selections
+        selections = self._decode(mps, opt_maps, ordered)
         util = self._selection_utility(selections)
         selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
         return {"selected": selected, "selections": selections,
                 "energy": -util, "utility": util}
 
-    def _decode(self, mps, opt_maps, dims, ordered, beta):
-        """Feasibility-preserving decode: keep a bundle only if it fits next to
-        the already-fixed selections, so no repair pass is ever needed.
+    def _decode(self, mps, opt_maps, ordered):
+        """Marginal decoder: contract the full MPS to get per-option
+        probabilities, then commit requests by decimation (highest conditional
+        marginal first).  Only options that fit beside the already-fixed
+        selections are scored, so the returned configuration is feasible by
+        construction and no repair pass is ever needed.
 
-        Requests are processed in descending order of their best feasible
-        marginal utility so that high-value requests commit first; this is a
-        deterministic, order-aware greedy decode on top of the constraint-
-        encoded tensor amplitudes."""
-        order = list(range(len(ordered)))
-        order.sort(key=lambda i: max(
-            (self._util_of.get((ordered[i], bid), 0.0)
-             for bid in opt_maps[i] if bid is not None), default=0.0),
-            reverse=True)
-
+        Replaces the old sequential sweep-decoder, which scored local tensor
+        amplitudes and collapsed to all-None under high contention."""
+        n = len(ordered)
+        fixed = {}
         selections = {}
         edge_load = defaultdict(int)
         mem_load = defaultdict(int)
-        total_util = 0.0
+        unfixed = list(range(n))
 
-        for r_idx in order:
-            rid = ordered[r_idx]
-            t = mps[r_idx]
-            scores = []
-            for b_idx, bid in enumerate(opt_maps[r_idx]):
-                if bid is None:
-                    scores.append((0.0, 0.0, None))
-                    continue
-                if not self._fits(rid, bid, edge_load, mem_load):
-                    continue
-                marginal = self._util_of.get((rid, bid), 0.0)
-                weight = float(np.abs(t[b_idx]).sum())
-                scores.append((weight * np.exp(min(beta * marginal, 50.0)), marginal, bid))
-
-            best = max(scores, key=lambda s: (s[0], s[1]))
-            bid = best[2]
+        while unfixed:
+            best = None
+            best_key = None
+            for idx in unfixed:
+                P = self._conditional_marginal(mps, opt_maps, idx, fixed)
+                rid = ordered[idx]
+                opts = opt_maps[idx]
+                feasible_b = [b for b in range(len(opts))
+                              if opts[b] is None or self._fits(rid, opts[b], edge_load, mem_load)]
+                b_star = max(feasible_b, key=lambda b: (
+                    P[b], self._util_of.get((rid, opts[b]), 0.0)))
+                key = (P[b_star], self._util_of.get((rid, opts[b_star]), 0.0))
+                if best_key is None or key > best_key:
+                    best_key = key
+                    best = (idx, b_star)
+            idx, b_star = best
+            rid = ordered[idx]
+            bid = opt_maps[idx][b_star]
+            fixed[idx] = b_star
             selections[rid] = bid
             if bid is not None:
                 self._commit(rid, bid, edge_load, mem_load)
-                total_util += self._util_of.get((rid, bid), 0.0)
-        return selections, total_util
+            unfixed.remove(idx)
+        return selections
+
+    def _conditional_marginal(self, mps, opt_maps, idx, fixed):
+        """Per-option marginal of request ``idx`` given fixed assignments,
+        obtained by contracting the full MPS with the fixed sites pinned."""
+        n = len(mps)
+        v = np.ones(1)
+        for j in range(idx):
+            t = mps[j]
+            f = fixed.get(j)
+            if f is not None:
+                t = t[f:f + 1]
+            v = np.einsum("i,bij->j", v, t)
+        w = np.ones(1)
+        for j in range(n - 1, idx, -1):
+            t = mps[j]
+            f = fixed.get(j)
+            if f is not None:
+                t = t[f:f + 1]
+            w = np.einsum("j,bij->i", w, t)
+        t_i = mps[idx]
+        d = t_i.shape[0]
+        P = np.array([np.einsum("i,ij,j->", v, t_i[b], w) for b in range(d)])
+        s = P.sum()
+        if s > 0:
+            return P / s
+        out = np.zeros(d)
+        out[0] = 1.0
+        return out
 
     def _fits(self, rid, bid, edge_load, mem_load) -> bool:
         for edge, d in self._edge_of.get((rid, bid), {}).items():

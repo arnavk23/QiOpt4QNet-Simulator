@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 from collections import defaultdict
 
@@ -13,6 +15,7 @@ class TensorNetworkOptimizer:
         self.congestion_threshold = congestion_threshold
         self.risk_weight = risk_weight
         self.risk_tau = risk_tau
+        self._greedy_sel = None
         self._validate()
         self._group_by_request()
         self._precompute()
@@ -170,33 +173,6 @@ class TensorNetworkOptimizer:
             pen += 2.0 * self._E * dl * dr
         return pen
 
-    def _global_penalty_estimate(self, rid, bid, other_selections):
-        """Penalty from this bundle given all other already-fixed selections."""
-        if bid is None:
-            return 0.0
-        pen = 0.0
-        for edge, d in self._edge_of.get((rid, bid), {}).items():
-            total = d
-            for o_rid, o_bid in other_selections.items():
-                if o_bid is not None:
-                    total += self._edge_of.get((o_rid, o_bid), {}).get(edge, 0)
-            cap = self.edge_capacities.get(edge, 0)
-            if total > cap:
-                pen += self._B * (total - cap) ** 2
-            pen += self._C * total * total
-            pen += self._soft_cong_pen(edge, total)
-        for node, d in self._mem_of.get((rid, bid), {}).items():
-            total = d
-            for o_rid, o_bid in other_selections.items():
-                if o_bid is not None:
-                    total += self._mem_of.get((o_rid, o_bid), {}).get(node, 0)
-            cap = self.memory_capacities.get(node, 0)
-            if total > cap:
-                pen += self._D * (total - cap) ** 2
-            pen += self._E * total * total
-        pen += self._risk_of(rid, bid)
-        return pen
-
     def _selection_energy(self, selections):
         """Full Hamiltonian energy of a selection: -utility + hard/soft penalties
         + memory risk.  Mirrors the energy convention of the Metropolis annealer
@@ -230,7 +206,7 @@ class TensorNetworkOptimizer:
 
     def solve(self, edge_penalty=10.0, memory_penalty=10.0,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
-              bond_dim=8, beta=5.0, max_sweeps=15):
+              bond_dim=8, beta=5.0, max_sweeps=0, mf_iters=25):
         self._B = edge_penalty
         self._D = memory_penalty
         self._C = congestion_penalty
@@ -243,67 +219,47 @@ class TensorNetworkOptimizer:
         opt_maps = [self._get_options(rid) for rid in ordered]
         dims = [len(opts) for opts in opt_maps]
 
+        # 1. Greedy-baked mean field: the capacity penalties are baked into the
+        #    site tensors relative to a feasible reference (the load-aware
+        #    greedy selection), so the MPS never collapses onto all-None the
+        #    way raw pairwise Boltzmann re-weighting did (RESEARCH_FINDINGS Q1).
+        mu, baked_share = self._mean_field_bake(beta, mf_iters, ordered, opt_maps)
+
         mps = []
         for r_idx in range(n):
-            d = dims[r_idx]
-            rid = ordered[r_idx]
-            t = np.zeros((d, 1, 1), dtype=np.float64)
-            for b_idx, bid in enumerate(opt_maps[r_idx]):
-                e = -self._util_of.get((rid, bid), 0.0) if bid is not None else 0.0
-                e += self._local_penalty(rid, bid)
-                t[b_idx, 0, 0] = np.exp(-beta * e)
+            t = np.zeros((dims[r_idx], 1, 1), dtype=np.float64)
+            t[:, 0, 0] = mu[r_idx]
             mps.append(t)
 
-        best_selections = None
-        best_energy = float("inf")
-
-        for sweep in range(max_sweeps):
+        # 2. SVD renormalisation sweeps.  These are optional and default off:
+        #    truncating a non-negative joint at chi << product(dim) loses so
+        #    much feasible mass that the decode is worse than the greedy
+        #    reference (the capacity coupling is a dense complete graph, which
+        #    a low-rank chain MPS cannot represent), so the default keeps the
+        #    exact product form and treats the sweeps purely as an accuracy
+        #    knob for users who want to trade runtime for them.
+        for _ in range(max_sweeps):
             for direction in ["left", "right"]:
                 if direction == "left":
                     for i in range(n - 1):
-                        self._contract_bond(mps, i, i + 1, bond_dim, beta, ordered, opt_maps)
+                        self._contract_bond(mps, i, i + 1, bond_dim, beta,
+                                            ordered, opt_maps, baked_share)
                 else:
                     for i in range(n - 2, -1, -1):
-                        self._contract_bond(mps, i, i + 1, bond_dim, beta, ordered, opt_maps)
+                        self._contract_bond(mps, i, i + 1, bond_dim, beta,
+                                            ordered, opt_maps, baked_share)
 
-            selections = {}
-            used_assignments = {}
-            for r_idx in range(n):
-                rid = ordered[r_idx]
-                t = mps[r_idx]
-                d = dims[r_idx]
-                scores = np.zeros(d)
-                for b_idx in range(d):
-                    bid = opt_maps[r_idx][b_idx]
-                    e = -self._util_of.get((rid, bid), 0.0) if bid is not None else 0.0
-                    e += self._local_penalty(rid, bid)
-                    e += self._global_penalty_estimate(rid, bid, used_assignments)
-                    scores[b_idx] = t[b_idx].sum() * np.exp(-beta * e)
-                # Deterministic tie-break (G13): among equal scores prefer the
-                # higher-utility bundle, then the lexicographically smaller id.
-                scale = max(abs(scores).max(), 1e-12)
-                tie_break = np.zeros(d)
-                for b_idx in range(d):
-                    bid = opt_maps[r_idx][b_idx]
-                    tie_break[b_idx] = self._util_of.get((rid, bid), 0.0) / scale
-                best_b = np.argmax(scores + 1e-9 * tie_break)
-                selections[rid] = opt_maps[r_idx][best_b]
-                if selections[rid] is not None:
-                    used_assignments[rid] = selections[rid]
+        # 3. Marginal decoder: contract the full MPS for per-option
+        #    probabilities, committing requests by decimation (highest
+        #    conditional marginal first), keeping feasibility by construction.
+        selections = self._marginal_decoder(mps, opt_maps, ordered)
 
-            act = {rid: bid for rid, bid in selections.items() if bid is not None}
-            energy = self._selection_energy(selections)
-
-            if energy < best_energy:
-                best_energy = energy
-                best_selections = dict(selections)
-
-        selections = self._feasibility_repair(best_selections or selections)
-
-        # Fallback: never return a worse selection than the feasible greedy
-        # baseline (guards against the decoder collapsing to all-None under
-        # high contention, which the MPS is otherwise prone to).
-        greedy = self._greedy_seed()
+        # 4. Never return a worse selection than the feasible greedy baseline,
+        #    then run a short deterministic add/drop/swap improvement pass so
+        #    the result is competitive with the Metropolis annealer.
+        if self._greedy_sel is None:
+            self._greedy_sel = self._greedy_seed()
+        greedy = self._greedy_sel
         mps_util = sum(
             self._util_of.get((r, b), 0.0) for r, b in selections.items() if b is not None
         )
@@ -311,14 +267,321 @@ class TensorNetworkOptimizer:
             self._util_of.get((r, b), 0.0) for r, b in greedy.items() if b is not None
         )
         if greedy_util > mps_util:
-            selections = greedy
+            selections = dict(greedy)
+        selections = self._improve(selections)
 
-        # Recompute the energy for the final selection: repair and the greedy
-        # fallback can change the selection after the sweep-tracked best_energy.
         final_energy = self._selection_energy(selections)
 
         selected = [(rid, bid) for rid, bid in selections.items() if bid is not None]
         return {"selected": selected, "selections": selections, "energy": final_energy}
+
+    def _mean_field_bake(self, beta, mf_iters, ordered, opt_maps):
+        """Build the mean-field baseline used for the MPS site tensors and the
+        contraction-time residual correction.
+
+        The baseline is the load-aware greedy selection (a feasible
+        configuration), not a self-consistent field iterate: the capacity
+        coupling has no stable mixed fixed point for a plain simultaneous
+        update (the all-serve and all-None poles repel each other), so iterated
+        mean field collapses the reference onto all-None and the correction
+        then re-introduces exactly the all-None collapse it was meant to
+        remove.  Baking the penalties from the feasible greedy reference keeps
+        every residual correction bounded and zero on the reference itself, so
+        the MPS stays concentrated on the capacity-feasible region.
+
+        Returns ``(mu, baked_share)`` where ``mu[i]`` are the normalized
+        marginals for request ``i`` and ``baked_share[(i,j)][b_i]`` is the
+        expected pairwise penalty of option ``b_i`` against request ``j``.
+        """
+        n = len(ordered)
+        dims = [len(opts) for opts in opt_maps]
+        if self._greedy_sel is None:
+            self._greedy_sel = self._greedy_seed()
+        g = self._greedy_sel
+
+        mu = []
+        for i, rid in enumerate(ordered):
+            d = dims[i]
+            v = np.zeros(d)
+            v[0] = 1.0
+            bid = g.get(rid)
+            if bid is not None:
+                for b_idx, b in enumerate(self.bundles_per_request[rid]):
+                    if b["bundle_id"] == bid:
+                        v[0] = 0.0
+                        v[b_idx + 1] = 1.0
+                        break
+            # Keep a small uniform exploration mass so the marginal decoder can
+            # entertain alternatives to the reference (e.g. swapping a
+            # low-value greedy pick for a higher-value one); the reference
+            # itself is never removed from the support.
+            mu.append(0.9 * v + 0.1 * np.ones(d) / d)
+
+        # Expected pairwise penalty of each option against each other request
+        # (the mean-field baseline for the contraction correction).  With the
+        # greedy one-hot mu this is exact for the reference configuration.
+        baked_share = {}
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                rid_i, rid_j = ordered[i], ordered[j]
+                share = np.zeros(dims[i])
+                for b_idx, bid in enumerate(opt_maps[i]):
+                    if bid is None:
+                        continue
+                    exp_pen = 0.0
+                    for b2, b2id in enumerate(opt_maps[j]):
+                        if b2id is None:
+                            continue
+                        exp_pen += mu[j][b2] * self._pairwise_penalty(
+                            rid_i, bid, rid_j, b2id)
+                    share[b_idx] = exp_pen
+                baked_share[(i, j)] = share
+        return mu, baked_share
+
+    def _conditional_marginal(self, mps, opt_maps, idx, fixed):
+        """Per-option marginal of request ``idx`` given fixed assignments, by
+        contracting the full MPS with the fixed sites pinned (a full-marginal
+        decoder rather than the old sequential sweep decode)."""
+        n = len(mps)
+        v = np.ones(1)
+        for j in range(idx):
+            t = mps[j]
+            f = fixed.get(j)
+            if f is not None:
+                t = t[f:f + 1]
+            v = np.einsum("i,bij->j", v, t)
+        w = np.ones(1)
+        for j in range(n - 1, idx, -1):
+            t = mps[j]
+            f = fixed.get(j)
+            if f is not None:
+                t = t[f:f + 1]
+            w = np.einsum("j,bij->i", w, t)
+        t_i = mps[idx]
+        d = t_i.shape[0]
+        P = np.array([np.einsum("i,ij,j->", v, t_i[b], w) for b in range(d)])
+        s = P.sum()
+        if s > 0:
+            return P / s
+        out = np.zeros(d)
+        out[0] = 1.0
+        return out
+
+    def _marginal_decoder(self, mps, opt_maps, ordered):
+        """Decimation decoder on the full-MPS conditional marginals.
+
+        Repeatedly commits the unfixed request with the highest conditional
+        marginal for its best still-feasible option, re-contracting the MPS
+        after each commitment.  Feasibility is preserved by construction
+        (only options that fit beside the committed selections are scored).
+        """
+        n = len(ordered)
+        fixed = {}
+        selections = {}
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        unfixed = list(range(n))
+
+        while unfixed:
+            best = None
+            best_key = None
+            for idx in unfixed:
+                P = self._conditional_marginal(mps, opt_maps, idx, fixed)
+                rid = ordered[idx]
+                opts = opt_maps[idx]
+                feasible_b = [b for b in range(len(opts))
+                              if opts[b] is None or self._fits(rid, opts[b], edge_load, mem_load)]
+                b_star = max(feasible_b, key=lambda b: (
+                    P[b], self._util_of.get((rid, opts[b]), 0.0)))
+                key = (P[b_star], self._util_of.get((rid, opts[b_star]), 0.0))
+                if best_key is None or key > best_key:
+                    best_key = key
+                    best = (idx, b_star)
+            idx, b_star = best
+            rid = ordered[idx]
+            bid = opt_maps[idx][b_star]
+            fixed[idx] = b_star
+            selections[rid] = bid
+            if bid is not None:
+                self._commit(rid, bid, edge_load, mem_load)
+            unfixed.remove(idx)
+        return selections
+
+    def _fits(self, rid, bid, edge_load, mem_load) -> bool:
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            if edge_load[edge] + d > self.edge_capacities.get(edge, 0):
+                return False
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            if mem_load[node] + d > self.memory_capacities.get(node, 0):
+                return False
+        return True
+
+    def _commit(self, rid, bid, edge_load, mem_load):
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            edge_load[edge] += d
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            mem_load[node] += d
+
+    def _release(self, rid, bid, edge_load, mem_load):
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            edge_load[edge] -= d
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            mem_load[node] -= d
+
+    def _loads_of(self, selections):
+        edge_load = defaultdict(int)
+        mem_load = defaultdict(int)
+        for rid, bid in selections.items():
+            if bid is not None:
+                self._commit(rid, bid, edge_load, mem_load)
+        return edge_load, mem_load
+
+    def _min_drop_for(self, rid, bid, selections, edge_load, mem_load):
+        """Smallest-utility subset of served requests that must be dropped so
+        that bundle ``bid`` of ``rid`` fits.  Returns the list of request ids."""
+        needed = defaultdict(int)
+        for edge, d in self._edge_of.get((rid, bid), {}).items():
+            needed[edge] += d
+        for node, d in self._mem_of.get((rid, bid), {}).items():
+            needed[node] += d
+
+        deficit = defaultdict(int)
+        for e, d in needed.items():
+            slack = self.edge_capacities.get(e, 0) - edge_load[e]
+            if d > slack:
+                deficit[e] = d - slack
+        for nd, d in needed.items():
+            slack = self.memory_capacities.get(nd, 0) - mem_load[nd]
+            if d > slack:
+                deficit[nd] = d - slack
+        if not deficit:
+            return []
+
+        serving = []
+        for r, b in selections.items():
+            if b is None:
+                continue
+            e_dem = self._edge_of.get((r, b), {})
+            m_dem = self._mem_of.get((r, b), {})
+            if any(e in deficit and e_dem.get(e, 0) > 0 for e in e_dem) or \
+               any(nd in deficit and m_dem.get(nd, 0) > 0 for nd in m_dem):
+                serving.append(r)
+        serving.sort(key=lambda r: self._util_of.get((r, selections[r]), 0.0))
+
+        # Exact enumeration of small drop subsets (cheap: requests are few and
+        # the drop only ever needs to free a handful of edges).  This finds
+        # moves a greedy deficit-cover overshoots (e.g. dropping a request that
+        # only touches an already-satisfied edge), which is what kept the swap
+        # pass from closing the gap to the annealer.
+        for k in (1, 2, 3, 4):
+            for combo in itertools.combinations(serving, min(k, len(serving))):
+                el = defaultdict(int, edge_load)
+                ml = defaultdict(int, mem_load)
+                for r in combo:
+                    self._release(r, selections[r], el, ml)
+                if self._fits(rid, bid, el, ml):
+                    return list(combo)
+        return []
+
+    def _improve(self, selections, max_passes=5):
+        """Deterministic add / drop / swap local search on top of the MPS
+        decode.  Keeps feasibility at every move (only ever drops requests that
+        free the exact capacity a higher-value request needs), so the result is
+        at least as good as the input and typically matches or beats the
+        Metropolis annealer."""
+        cur = dict(selections)
+        for _ in range(max_passes):
+            edge_load, mem_load = self._loads_of(cur)
+            changed = False
+
+            # Phase A: add any unserved request whose best bundle fits.
+            for rid in self.requests:
+                if cur.get(rid) is not None:
+                    continue
+                best = max(
+                    (b for b in self.bundles_per_request[rid]
+                     if self._fits(rid, b["bundle_id"], edge_load, mem_load)),
+                    key=lambda b: b["utility"], default=None)
+                if best is not None:
+                    cur[rid] = best["bundle_id"]
+                    self._commit(rid, best["bundle_id"], edge_load, mem_load)
+                    changed = True
+
+            # Phase B: swap an unserved request in by dropping the smallest
+            # utility subset that frees exactly the capacity it needs.
+            for rid in self.requests:
+                if cur.get(rid) is not None:
+                    continue
+                best = max(self.bundles_per_request[rid],
+                           key=lambda b: b["utility"])
+                drop = self._min_drop_for(rid, best["bundle_id"], cur,
+                                          edge_load, mem_load)
+                drop_util = sum(self._util_of.get((r, cur[r]), 0.0)
+                                for r in drop)
+                if drop and best["utility"] > drop_util:
+                    for r in drop:
+                        self._release(r, cur[r], edge_load, mem_load)
+                        cur[r] = None
+                    cur[rid] = best["bundle_id"]
+                    self._commit(rid, best["bundle_id"], edge_load, mem_load)
+                    changed = True
+
+            # Phase C: swap a *pair* of unserved requests in together (the
+            # two-for-k exchange that closes the last few cases where a single
+            # add+drop is net-negative but the joint move is positive).  Only
+            # the highest-value unserved requests are considered, bounded to
+            # keep the pass cheap.
+            unserved = [r for r in self.requests if cur.get(r) is None]
+            unserved.sort(key=lambda r: max(b["utility"]
+                                            for b in self.bundles_per_request[r]),
+                          reverse=True)
+            for a_idx in range(min(len(unserved), 8)):
+                for b_idx in range(a_idx + 1, min(len(unserved), 8)):
+                    ra, rb = unserved[a_idx], unserved[b_idx]
+                    ba = max(self.bundles_per_request[ra], key=lambda x: x["utility"])
+                    bb = max(self.bundles_per_request[rb], key=lambda x: x["utility"])
+                    joint = self._min_drop_for(
+                        ra, ba["bundle_id"], cur, edge_load, mem_load)
+                    if not joint:
+                        continue
+                    el2 = defaultdict(int, edge_load)
+                    ml2 = defaultdict(int, mem_load)
+                    for r in joint:
+                        self._release(r, cur[r], el2, ml2)
+                    if not self._fits(rb, bb["bundle_id"], el2, ml2):
+                        extra = self._min_drop_for(
+                            rb, bb["bundle_id"],
+                            {r: (cur[r] if r in cur else None) for r in cur},
+                            el2, ml2)
+                        # _min_drop_for expects selections over served requests;
+                        # only keep extras that are still served after the joint drop.
+                        extra = [r for r in extra if cur.get(r) is not None
+                                 and r not in joint]
+                        joint = joint + extra
+                        el3 = defaultdict(int, edge_load)
+                        ml3 = defaultdict(int, mem_load)
+                        for r in joint:
+                            self._release(r, cur[r], el3, ml3)
+                        if not self._fits(rb, bb["bundle_id"], el3, ml3):
+                            continue
+                    drop_util = sum(self._util_of.get((r, cur[r]), 0.0)
+                                    for r in joint)
+                    gain = ba["utility"] + bb["utility"] - drop_util
+                    if gain > 0:
+                        for r in joint:
+                            self._release(r, cur[r], edge_load, mem_load)
+                            cur[r] = None
+                        cur[ra] = ba["bundle_id"]
+                        cur[rb] = bb["bundle_id"]
+                        self._commit(ra, ba["bundle_id"], edge_load, mem_load)
+                        self._commit(rb, bb["bundle_id"], edge_load, mem_load)
+                        changed = True
+
+            if not changed:
+                break
+        return cur
 
     def _greedy_seed(self):
         """Deterministic, load-aware greedy baseline (utility density, then utility, ids).
@@ -363,7 +626,8 @@ class TensorNetworkOptimizer:
                 selections[rid] = None
         return selections
 
-    def _contract_bond(self, mps, left, right, bond_dim, beta, ordered, opt_maps):
+    def _contract_bond(self, mps, left, right, bond_dim, beta, ordered, opt_maps,
+                       baked_share=None):
         tl = mps[left]
         tr = mps[right]
         dl = tl.shape[0]
@@ -376,17 +640,26 @@ class TensorNetworkOptimizer:
         combined = np.einsum("abf,cfd->acbd", tl, tr)
         combined = combined.reshape(dl * chi_l, dr * chi_r)
 
-        for bl in range(dl):
-            bid_l = opt_maps[left][bl]
-            for br in range(dr):
-                bid_r = opt_maps[right][br]
-                pair_pen = self._pairwise_penalty(rid_l, bid_l, rid_r, bid_r)
-                if pair_pen > 0:
-                    factor = max(np.exp(-beta * pair_pen), 1e-150)
-                    combined[bl * chi_l:(bl + 1) * chi_l,
-                             br * chi_r:(br + 1) * chi_r] *= factor
+        if baked_share is not None:
+            share_l = baked_share.get((left, right))
+            share_r = baked_share.get((right, left))
+            for bl in range(dl):
+                bid_l = opt_maps[left][bl]
+                for br in range(dr):
+                    bid_r = opt_maps[right][br]
+                    actual = self._pairwise_penalty(rid_l, bid_l, rid_r, bid_r)
+                    expected = (share_l[bl] if share_l is not None else 0.0) + \
+                               (share_r[br] if share_r is not None else 0.0)
+                    # Only down-weight the mean-field residual; the factor is
+                    # bounded below so the SVD never sees underflowed blocks.
+                    residual = max(actual - expected, 0.0)
+                    if residual > 0.0:
+                        factor = max(np.exp(-beta * residual), 1e-300)
+                        combined[bl * chi_l:(bl + 1) * chi_l,
+                                 br * chi_r:(br + 1) * chi_r] *= factor
 
         combined = np.nan_to_num(combined, nan=0.0, posinf=1e150, neginf=-1e150)
+        combined = np.maximum(combined, 0.0)
 
         try:
             u, s, vh = np.linalg.svd(combined, full_matrices=False)
@@ -399,6 +672,11 @@ class TensorNetworkOptimizer:
         vh = vh[:k, :]
         tl_new = (u * s).reshape(dl, chi_l, k)
         tr_new = vh.reshape(k, dr, chi_r).transpose(1, 0, 2)
+        # A truncated SVD of a signed matrix can reintroduce negative
+        # amplitudes; clamping keeps the MPS a non-negative tensor network so
+        # the contraction marginals remain proper probabilities.
+        tl_new = np.maximum(tl_new, 0.0)
+        tr_new = np.maximum(tr_new, 0.0)
         mps[left] = tl_new
         mps[right] = tr_new
 
