@@ -24,7 +24,7 @@ def _topology(n_nodes=6, cap=6, mem=8, raw=0.85):
 def _instance(n_req=3, n_nodes=6, seed=42):
     topo = _topology(n_nodes)
     return topo, contention_sweep_instances(lambda: topo, [n_req], seed=seed)[
-        "n%d" % n_req]
+        f"req{n_req}"]
 
 
 def test_hardware_graph_structure():

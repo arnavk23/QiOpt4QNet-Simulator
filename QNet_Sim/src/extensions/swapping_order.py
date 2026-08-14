@@ -55,7 +55,23 @@ def _decay_relative(hold_time: float, tau_mem: float,
 # binary tree over n leaves is one valid swapping order (n - 1 BSMs); the
 # number of trees is the Catalan number C_{n-1}.
 
+# Exhaustive enumeration is only feasible for short paths: the tree count is
+# the Catalan number C_{n-1}, which grows super-exponentially (8 leaves ->
+# 429 trees, 9 -> 1430, 10 -> 4862, 14 -> ~2.7M).  Paths in larger topologies
+# can easily exceed 8 links, so every exhaustive call site must guard on this
+# constant and fall back to the canonical trees instead of hanging.
+MAX_EXHAUSTIVE_LEAVES = 8
+
+
 def _trees(n_leaves: int):
+    """All full binary trees over ``n_leaves`` leaves (Catalan(n-1) of them).
+
+    Callers must not invoke this for ``n_leaves > MAX_EXHAUSTIVE_LEAVES``;
+    use ``balanced_tree`` (a minimum-depth tree, which also maximizes
+    delivered fidelity under storage decay) as the fallback instead.
+    """
+    if n_leaves <= 0:
+        raise ValueError(f"n_leaves must be a positive integer (got {n_leaves})")
     if n_leaves == 1:
         return [("leaf",)]
     out = []
@@ -163,8 +179,16 @@ def strategy_metrics(tree, fids: List[float], delta: float = 1.0,
 def all_strategies(fids: List[float], delta: float = 1.0,
                    tau_mem: float = float("inf"),
                    t1: Optional[float] = None) -> List[Dict]:
-    """Every swapping tree scored; also tagged with its strategy family."""
-    trees = _trees(len(fids))
+    """Every swapping tree scored; also tagged with its strategy family.
+
+    For paths longer than ``MAX_EXHAUSTIVE_LEAVES`` links the full Catalan
+    enumeration is skipped (it would be super-exponentially large) and only
+    the canonical ``linear`` and ``balanced`` trees are returned.
+    """
+    if len(fids) > MAX_EXHAUSTIVE_LEAVES:
+        trees = [linear_tree(len(fids)), balanced_tree(len(fids))]
+    else:
+        trees = _trees(len(fids))
     families = {}
     for tree in trees:
         if tree == linear_tree(len(fids)):
@@ -192,9 +216,15 @@ def strategy_fidelity(fids: List[float], strategy: str = "linear",
     elif strategy == "balanced":
         tree = balanced_tree(n)
     elif strategy == "optimal":
-        candidates = _trees(n)
-        tree = min(candidates, key=lambda t: (tree_depth(t),
-                                              -tree_peak_concurrency(t)))
+        if n > MAX_EXHAUSTIVE_LEAVES:
+            # Exhaustive search would enumerate Catalan(n-1) trees; the
+            # balanced tree is a minimum-depth tree, so it also maximizes
+            # delivered fidelity under storage decay.
+            tree = balanced_tree(n)
+        else:
+            candidates = _trees(n)
+            tree = min(candidates, key=lambda t: (tree_depth(t),
+                                                  -tree_peak_concurrency(t)))
     else:
         raise ValueError(f"unknown strategy {strategy!r}")
     return strategy_metrics(tree, fids, delta, tau_mem, t1)
@@ -324,11 +354,18 @@ def optimal_order_bundle(topology: dict, path: List[str], q: int,
             f = FidelityModel.purification_bbpssw(f)
         link_fids.append(f)
 
-    best = None
-    for tree in _trees(len(link_fids)):
-        m = strategy_metrics(tree, link_fids, delta, tau_mem)
-        if best is None or m["delivered_fidelity"] > best["delivered_fidelity"]:
-            best = m
+    if len(link_fids) > MAX_EXHAUSTIVE_LEAVES:
+        # Skip the Catalan enumeration for long paths: the balanced tree is
+        # a minimum-depth tree, hence optimal for delivered fidelity (the
+        # noiseless swap is associative, and decay favors minimal hold time).
+        best = strategy_metrics(balanced_tree(len(link_fids)), link_fids,
+                                delta, tau_mem)
+    else:
+        best = None
+        for tree in _trees(len(link_fids)):
+            m = strategy_metrics(tree, link_fids, delta, tau_mem)
+            if best is None or m["delivered_fidelity"] > best["delivered_fidelity"]:
+                best = m
     best_f = best["delivered_fidelity"]
     if best_f < min_fidelity:
         return None
@@ -408,7 +445,7 @@ def run_swapping_bundle_comparison(topology: dict, n_requests: int = 8,
         util_of = {(b["request_id"], b["bundle_id"]): b["utility"] for b in bundles}
         opt = MetropolisAnnealer(bundles, ec, mc, seed=seed)
         t0 = time.perf_counter()
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         elapsed = time.perf_counter() - t0
         sel = r.get("selected", [])

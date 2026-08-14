@@ -68,7 +68,7 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
     start = time.perf_counter()
     if method in ("qubo_sa", "qubo_sqa"):
         optimizer = QUBOOptimizer(bundles, edge_caps, mem_caps)
-        bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        bqm = optimizer.to_bqm(
                                congestion_penalty=kwargs.get("congestion_penalty", 0.05),
                                memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05))
         if method == "qubo_sqa":
@@ -99,8 +99,6 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
         result = opt.solve(
             bond_dim=kwargs.get("bond_dim", 8),
             beta=kwargs.get("beta", 5.0),
-            edge_penalty=10.0,
-            memory_penalty=10.0,
             congestion_penalty=kwargs.get("congestion_penalty", 0.05),
             memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )
@@ -112,8 +110,6 @@ def run_solver(name, bundles, edge_caps, mem_caps, method="qubo_sa", **kwargs):
         result = opt.solve(
             branch_factor=kwargs.get("branch_factor", 8),
             beta=kwargs.get("beta", 5.0),
-            edge_penalty=10.0,
-            memory_penalty=10.0,
             congestion_penalty=kwargs.get("congestion_penalty", 0.05),
             memory_congestion_penalty=kwargs.get("memory_congestion_penalty", 0.05),
         )

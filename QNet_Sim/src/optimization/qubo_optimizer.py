@@ -207,6 +207,11 @@ class QUBOOptimizer:
         decoded bundle; a bundle is kept only if it still fits alongside the
         already-kept selections. The returned selection is always
         capacity-feasible, and the repair is deterministic.
+
+        Bundles with non-positive utility are dropped: the encoding is
+        at-most-one per request, so leaving the request unserved (zero
+        contribution) strictly dominates provisioning a non-positive-utility
+        bundle and only frees capacity for other requests.
         """
         selected_map = dict(selected)
         order = {}
@@ -220,7 +225,9 @@ class QUBOOptimizer:
         mem_load = defaultdict(int)
         repaired = []
         for rid in ordered_requests:
-            bid = selected_map[rid]
+            utility, bid = order[rid][0], selected_map[rid]
+            if utility <= 0.0:
+                continue
             demands = self._demands_of(rid, bid)
             if demands is None:
                 continue
@@ -286,14 +293,38 @@ class QUBOOptimizer:
             pen += memory_congestion_penalty * load * load
         return -utility + pen
 
-    def to_qubo(self, penalty, edge_penalty, memory_penalty,
+    def _utility_scale_penalties(self):
+        """(A, B, D) anchored to the utility scale: ``p0 + eps`` with
+        ``p0 = max(0, u_{r,b})``, per the manuscript's ``A > max u`` rule.
+        Used when callers omit penalty arguments so the at-most-one and
+        capacity constraints can never be silently under-enforced on
+        high-utility instances.
+        """
+        p0 = max((max(0.0, float(bundle["utility"])) for bundle in self.bundles),
+                 default=0.0)
+        eps = max(1e-9, 1e-6 * p0)
+        return p0 + eps, p0 + eps, p0 + eps
+
+    def _resolve_penalties(self, penalty, edge_penalty, memory_penalty):
+        if penalty is None or edge_penalty is None or memory_penalty is None:
+            a, b, d = self._utility_scale_penalties()
+            return (a if penalty is None else penalty,
+                    b if edge_penalty is None else edge_penalty,
+                    d if memory_penalty is None else memory_penalty)
+        return penalty, edge_penalty, memory_penalty
+
+    def to_qubo(self, penalty=None, edge_penalty=None, memory_penalty=None,
                 congestion_penalty=0.05, memory_congestion_penalty=0.05):
+        penalty, edge_penalty, memory_penalty = self._resolve_penalties(
+            penalty, edge_penalty, memory_penalty)
         return self.model.to_qubo(feed_dict={
             "A": penalty, "B": edge_penalty, "D": memory_penalty,
             "C": congestion_penalty, "E": memory_congestion_penalty})
 
-    def to_bqm(self, penalty, edge_penalty, memory_penalty,
+    def to_bqm(self, penalty=None, edge_penalty=None, memory_penalty=None,
                congestion_penalty=0.05, memory_congestion_penalty=0.05):
+        penalty, edge_penalty, memory_penalty = self._resolve_penalties(
+            penalty, edge_penalty, memory_penalty)
         return self.model.to_bqm(feed_dict={
             "A": penalty, "B": edge_penalty, "D": memory_penalty,
             "C": congestion_penalty, "E": memory_congestion_penalty})

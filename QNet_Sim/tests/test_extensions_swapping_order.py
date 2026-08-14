@@ -86,6 +86,43 @@ def test_all_strategies_catalan_count():
     assert len(all_strategies(fids)) == 5
 
 
+def test_all_strategies_capped_for_long_paths():
+    # 9 leaves -> Catalan(8) = 1430 trees; exhaustive enumeration is skipped
+    # and only the canonical linear/balanced trees are returned.
+    rows = all_strategies(_fids(9))
+    assert {r["strategy"] for r in rows} <= {"linear", "balanced"}
+    assert len(rows) <= 2
+
+
+def test_optimal_falls_back_to_balanced_for_long_paths():
+    from extensions.swapping_order import MAX_EXHAUSTIVE_LEAVES
+    n = MAX_EXHAUSTIVE_LEAVES + 2
+    fids = _fids(n, 0.85)
+    opt = strategy_fidelity(fids, "optimal", delta=1.0, tau_mem=3.0)
+    bal = strategy_fidelity(fids, "balanced", delta=1.0, tau_mem=3.0)
+    assert opt["depth"] == bal["depth"] == math.ceil(math.log2(n))
+    assert opt["delivered_fidelity"] == pytest.approx(
+        bal["delivered_fidelity"], rel=1e-12)
+
+
+def test_fidelity_inputs_are_validated():
+    with pytest.raises(ValueError):
+        FidelityModel.end_to_end_fidelity([0.85, 1.5])
+    with pytest.raises(ValueError):
+        FidelityModel.purification_bbpssw(2.0)
+    with pytest.raises(ValueError):
+        FidelityModel.purification_bbpssw(0.4)  # below the purification floor
+    with pytest.raises(ValueError):
+        FidelityModel.entanglement_swapping(0.85, -0.1)
+
+
+def test_purification_floor_is_explicit():
+    # at the 0.5 floor the BBPSSW map is the identity
+    assert FidelityModel.purification_bbpssw(0.5) == pytest.approx(0.5, abs=1e-12)
+    # strictly above the floor it improves
+    assert FidelityModel.purification_bbpssw(0.7) > 0.7
+
+
 def test_strategy_frontier_non_dominated():
     fids = _fids(6, 0.85)
     front = strategy_frontier(fids, delta=1.0, tau_mem=3.0)

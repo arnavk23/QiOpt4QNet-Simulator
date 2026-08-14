@@ -61,7 +61,7 @@ def run_quality_time_curves(topology_fn: Callable,
         for budget in metropolis_budgets:
             sf = build_metropolis(b, ec, mc, seed=seed)
             t0 = time.perf_counter()
-            r = sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+            r = sf(
                    max_iterations=budget, cooling_rate=0.97, n_restarts=1,
                    steps_per_temperature=10, initial_temperature=100.0,
                    congestion_penalty=0.0, memory_congestion_penalty=0.0)
@@ -81,7 +81,7 @@ def run_quality_time_curves(topology_fn: Callable,
         for bd in bond_dims:
             sf = build_tensor_network(b, ec, mc)
             t0 = time.perf_counter()
-            r = sf(bond_dim=bd, beta=5.0, edge_penalty=10.0, memory_penalty=10.0,
+            r = sf(bond_dim=bd, beta=5.0,
                    max_sweeps=10, congestion_penalty=0.0, memory_congestion_penalty=0.0)
             t = time.perf_counter() - t0
             rows.append({

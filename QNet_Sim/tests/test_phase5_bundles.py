@@ -50,6 +50,27 @@ def test_bundle_generation():
             "C": 2 ** bundle.purification_rounds,
         }
 
+def test_sub_half_fidelity_links_skip_purification():
+    net = QuantumNetwork()
+    net.add_node(QuantumNode("A", 10))
+    net.add_node(QuantumNode("B", 10))
+    net.add_node(QuantumNode("C", 10))
+    # Links below the 0.5 purification floor: purification rounds must be
+    # skipped (not silently applied as no-ops), so fidelity stays flat.
+    net.add_link(QuantumLink("A", "B", 10, 1.0, 0.4, 5.0, 1))
+    net.add_link(QuantumLink("B", "C", 10, 1.0, 0.4, 5.0, 1))
+
+    request = Request(source="A", destination="C", minimum_fidelity=0.2, weight=1.0)
+    generator = BundleGenerator(net)
+    bundles = generator.generate_bundles(request, [["A", "B", "C"]])
+
+    # q=0, 1, 2 all survive the fidelity filter
+    assert len(bundles) == 3
+    fids = {b.purification_rounds: b.fidelity for b in bundles}
+    # swap(0.4, 0.4) = 0.4*0.4 + (0.6*0.6)/3 = 0.28, identical at every depth
+    assert all(abs(v - 0.28) < 1e-9 for v in fids.values())
+
+
 def test_dominated_pruning():
     generator = BundleGenerator(QuantumNetwork())
     req = Request("A", "C", 0.5)

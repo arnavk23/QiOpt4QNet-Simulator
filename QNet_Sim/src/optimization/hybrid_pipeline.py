@@ -148,8 +148,8 @@ class HybridPipeline:
             selections[rid] = bid
         annealer = MetropolisAnnealer(bundles, self.edge_capacities,
                                       self.memory_capacities, seed=self.seed)
-        result = annealer.solve(penalty=100.0, edge_penalty=10.0,
-                                memory_penalty=10.0, max_iterations=max_iterations,
+        result = annealer.solve(
+                                max_iterations=max_iterations,
                                 n_restarts=1, initial_selections=selections)
         return result["selected"]
 
@@ -199,7 +199,7 @@ def run_hybrid_comparison(topology_fn: Callable, n_requests: int = 12,
                           seed: int = 42) -> Dict:
     """Benchmark the full pipeline against its stage ablations."""
     from experiments.instances import contention_sweep_instances
-    inst = contention_sweep_instances(topology_fn, [n_requests], seed=seed)["n%d" % n_requests]
+    inst = contention_sweep_instances(topology_fn, [n_requests], seed=seed)[f"req{n_requests}"]
     bundles, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
 
     pipeline = HybridPipeline(bundles, ec, mc, seed=seed)

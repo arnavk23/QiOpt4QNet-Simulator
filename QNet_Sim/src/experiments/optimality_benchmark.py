@@ -185,7 +185,7 @@ def _run_solver(name: str, bundles: List[dict], ec: dict, mc: dict,
     if name == "metropolis":
         from optimization.metropolis_annealer import MetropolisAnnealer
         opt = MetropolisAnnealer(bundles, ec, mc, seed=seed)
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         sel = r.get("selected", [])
     elif name == "hybrid":
@@ -200,7 +200,7 @@ def _run_solver(name: str, bundles: List[dict], ec: dict, mc: dict,
         from optimization.qubo_optimizer import QUBOOptimizer
         from optimization.openjij_solver import solve_sqa
         opt = QUBOOptimizer(bundles, ec, mc)
-        bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        bqm = opt.to_bqm(
                          congestion_penalty=0.0, memory_congestion_penalty=0.0)
         resp = solve_sqa(bqm, num_reads=20, seed=seed)
         sel = opt.decode_sample(resp.first.sample, repair=True)

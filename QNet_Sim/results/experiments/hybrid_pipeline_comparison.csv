@@ -1,7 +1,7 @@
 n_requests,n_bundles_in,n_bundles_reduced,stage,utility,served
-6,13,3,full_pipeline,97.86051889188212,1
-6,13,3,qubo_only,58.88493809198497,1
-6,13,3,qubo_plus_repair,58.88493809198497,1
-12,20,6,full_pipeline,142.9591271118211,2
-12,20,6,qubo_only,135.66997021763152,2
-12,20,6,qubo_plus_repair,135.66997021763152,2
+6,13,3,full_pipeline,1.5848,1
+6,13,3,qubo_only,1.2263359999999996,1
+6,13,3,qubo_plus_repair,1.2263359999999996,1
+12,27,6,full_pipeline,2.3556,2
+12,27,6,qubo_only,1.7124534666666662,2
+12,27,6,qubo_plus_repair,1.7124534666666662,2

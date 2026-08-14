@@ -47,6 +47,22 @@ def test_metropolis_two_requests():
     assert len(result["selected"]) == 2
 
 
+def test_metropolis_default_penalties_anchor_to_utility_scale():
+    # With utilities above 100, the old fixed defaults (B=10) would silently
+    # prefer a capacity-violating bundle; the utility-scale default must not.
+    bundles = [
+        _make_bundle("b0", "r1", 150.0, {("A", "R"): 6, ("R", "B"): 6}, {"A": 6, "R": 6, "B": 6}),
+        _make_bundle("b1", "r1", 100.0, {("A", "R"): 1, ("R", "B"): 1}, {"A": 1, "R": 1, "B": 1}),
+    ]
+    edge_caps = {("A", "R"): 5, ("R", "B"): 5}
+    mem_caps = {"A": 5, "R": 5, "B": 5}
+
+    opt = MetropolisAnnealer(bundles, edge_caps, mem_caps, seed=42)
+    result = opt.solve(max_iterations=2000)  # no explicit penalties
+    result_bid = {rid: bid for rid, bid in result["selected"]}
+    assert result_bid["r1"] == "b1"  # feasible bundle, not the violating one
+
+
 def test_metropolis_respects_capacity():
     bundles = [
         _make_bundle("b0", "r1", 50.0, {("A", "R"): 10, ("R", "B"): 10}, {"A": 10, "R": 10, "B": 10}),

@@ -22,7 +22,7 @@ def _topology(n_nodes=8, cap=6, mem=10, raw=0.85, g=0.8):
 def _instance(n_req=4, n_nodes=8, seed=42):
     topo = _topology(n_nodes)
     return topo, contention_sweep_instances(lambda: topo, [n_req], seed=seed)[
-        "n%d" % n_req]
+        f"req{n_req}"]
 
 
 def _plan_from_solve(bundles, ec, mc, seed=42):
@@ -120,10 +120,16 @@ def test_sla_thresholds_flag_violations():
 
 
 def test_longer_paths_fail_more_often():
-    short_topo = _topology(n_nodes=4, raw=0.85)
-    long_topo = _topology(n_nodes=10, raw=0.85)
-    short_inst = contention_sweep_instances(lambda: short_topo, [4], seed=3)["n4"]
-    long_inst = contention_sweep_instances(lambda: long_topo, [4], seed=3)["n4"]
+    import random
+
+    def build(n_nodes, seed=0):
+        topo = _topology(n_nodes=n_nodes, raw=0.85)
+        pairs = [("N0", f"N{n_nodes - 1}", 50.0, 0.55),
+                 ("N1", f"N{n_nodes - 2}", 50.0, 0.55)]
+        bundles, ec, mc = generate_benchmark_instance(topo, pairs,
+                                                      random.Random(seed))
+        return topo, {"bundles": bundles, "edge_capacities": ec,
+                      "memory_capacities": mc}
 
     def serve(topo, inst):
         plan = _plan_from_solve(inst["bundles"], inst["edge_capacities"],
@@ -133,6 +139,9 @@ def test_longer_paths_fail_more_often():
         return sim.simulate_plan(inst["bundles"], plan, n_realizations=60)[
             "served_ratio"]
 
+    short_topo, short_inst = build(4)
+    long_topo, long_inst = build(10)
+    assert short_inst["bundles"] and long_inst["bundles"]
     assert serve(short_topo, short_inst) > serve(long_topo, long_inst)
 
 
