@@ -4,7 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{graphicx}
-\graphicspath{{../QNet_Sim/results/experiments/figures/}}
+\graphicspath{{../QNet_Sim/results/experiments/figures/}{../QNet_Sim/results/penalty_calibration/figures/}}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \emergencystretch=1em
@@ -404,6 +404,73 @@ function of binary variables and can be compiled to QUBO form
 $\mathbf{x}^T Q \mathbf{x}$ by expanding the squares and collecting
 coefficients.
 
+\subsection{Penalty Coefficient Calibration}
+\label{sec:calibration}
+
+The QUBO form requires three hard-constraint penalties: $A$
+(at-most-one per request), $B$ (edge capacity), and $D$ (memory
+capacity); in the direct Hamiltonian these are the multipliers
+$\lambda_1, \lambda_2, \lambda_3$.  Coefficient choice is delicate:
+penalties too low under-enforce feasibility (infeasible
+high-utility configurations win), while penalties too large flatten
+the objective and slow annealing.  We compare two calibration rules.
+
+\subsubsection{Conventional (utility-scale) calibration}
+
+The reference rule anchors all three coefficients to the largest
+positive bundle utility $P_0 = \max_{r,b} \max(0, u_{r,b})$:
+\begin{equation}
+  A = B = D = P_0 + \epsilon,
+  \label{eq:calib-conventional}
+\end{equation}
+where $\epsilon = 10^{-6}P_0$ is a small strictly-positive margin
+(\texttt{conventional\_calibrator.py}).  This guarantees that any
+feasible configuration strictly dominates every infeasible one---a
+sufficient condition, but one that applies the same margin to every
+resource regardless of how loads interact with capacity.  On instances
+where a small-margin violating bundle is the only way to serve a
+request, the utility-scale rule over-penalizes and the annealer may
+reject the request.
+
+\subsubsection{Resource-aware calibration}
+
+The proposed rule (\texttt{proposed\_calibrator.py}) keeps the
+request-conflict penalty $A$ on the conventional scale but calibrates
+$B$ and $D$ from the reachable-load structure.  For edge $e$ of
+capacity $C_e$, let $L_e^{\circ}$ be the smallest load reachable on
+$e$ from the other requests' candidate bundles (enumerated by bounded
+dynamic programming rather than the exponential Cartesian product)
+that violates capacity together with bundle $(r,b)$ of demand
+$d_{r,b}^e$.  Removing that single bundle reduces the squared-overload
+penalty by
+\begin{equation}
+  \Delta_e(r,b) = \max\!\bigl(0,\, L_e^{\circ} + d_{r,b}^e - C_e\bigr)^2
+    - \max\!\bigl(0,\, L_e^{\circ} - C_e\bigr)^2,
+  \label{eq:calib-drop}
+\end{equation}
+where the worst case is the smallest reachable violating load because
+the drop grows monotonically in $L_e$.  The resource-aware edge
+coefficient is
+\begin{equation}
+  B = \max_{e,(r,b)} \frac{\max(0, u_{r,b})}{\Delta_e(r,b)}
+    + \epsilon,
+  \label{eq:calib-edge}
+\end{equation}
+and $D$ is defined identically over memory resources.  Intuitively,
+$B$ is the largest utility that a violating configuration could gain
+by retaining a bundle that consumes a unit of capacity overload---a
+provably sufficient bound.  Because the utility-to-drop ratio cannot
+exceed $P_0$, the rule is never looser than the conventional one, and
+it is strictly tighter whenever reachable loads leave gaps between
+violation thresholds.
+
+\subsubsection{Soft congestion is separate}
+
+The soft congestion ($C$) and memory-congestion ($E$) regularizers are
+deliberately excluded from both hard-constraint rules; the calibration
+ablation runs with $C = E = 0$ so that the comparison isolates the
+hard coefficients.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Solver Architectures}
 \label{sec:solvers}
@@ -657,10 +724,13 @@ streaming achieves substantial speedups.
 We compile the direct Hamiltonian to a QUBO matrix $Q$ and sample it
 with OpenJij's simulated-annealing sampler~\cite{openjij}, a
 production-grade reference for the Metropolis-style search of
-Sec.~\ref{sec:metropolis}.  This serves as the baseline against which
-the adaptive top-$k$ reduction (Sec.~\ref{sec:adaptive-qubo}) and the
-embedded quantum-annealing backend (Sec.~\ref{sec:qa}) are measured
-under identical read counts.
+Sec.~\ref{sec:metropolis}.  Penalty coefficients $A,B,D$ are set by
+either the conventional utility-scale rule or the proposed
+resource-aware rule (Sec.~\ref{sec:calibration}), compared on held-out
+instances in Sec.~\ref{sec:results-calibration}.  This serves as the
+baseline against which the adaptive top-$k$ reduction
+(Sec.~\ref{sec:adaptive-qubo}) and the embedded quantum-annealing
+backend (Sec.~\ref{sec:qa}) are measured under identical read counts.
 
 \subsection{Embedded Quantum-Annealing Backend}
 \label{sec:qa}
@@ -1320,6 +1390,152 @@ reported $2.8$--$3.6\times$ utility advantage was an artifact of the
 old instance pipeline and of the unrepaired exactly-one encoding, both
 now removed.
 
+\subsection{Penalty Coefficient Calibration}
+\label{sec:results-calibration}
+
+The two calibration rules of Sec.~\ref{sec:calibration} are validated
+on a held-out suite of 1{,}080 instances: four topology families
+(chain and grid), instance seeds 10--99 (disjoint from the seeds used
+in the exploratory experiments), and request counts
+$n \in \{8, 16, 24\}$.  The coefficient scan is purely
+combinatorial---it requires no solver runs---and is followed by a
+matched solver study on exactly the instances where a coefficient
+difference exists.
+
+\subsubsection{Coefficient scan}
+
+At the exact $1\times$ calibration scale, the resource-aware rule
+produces a strictly lower $B$ in 133/1080 instances (12.3\%) and a
+strictly lower $D$ in 49/1080 (4.5\%); both coefficients are lowered
+simultaneously in 43 instances (4.0\%) and at least one is lowered in
+139 (12.9\%).  Conditional on strict tightening, $B$ is reduced by
+23.8\% and $D$ by 32.8\% on average (Fig.~\ref{fig:calib-ratios}).
+The distribution of ratios (left panel) shows the rule never exceeds
+the conventional scale, and the reduction boxplots (right panel) show
+that when tightening binds it is substantial.
+
+\begin{table}[H]
+  \centering
+  \caption{Coefficient-scan summary over the 1{,}080 held-out
+    instances at the $1\times$ calibration scale.  ``Tightened'' means
+the resource-aware coefficient is strictly lower than the
+utility-scale baseline; reductions are computed conditional on strict
+tightening.}
+  \label{tab:calib-scan}
+  \begin{tabular}{lcc}
+    \toprule
+    Outcome & Instances & Share \\
+    \midrule
+    $B$ strictly lower & 133/1080 & 12.3\% \\
+    $D$ strictly lower & 49/1080 & 4.5\% \\
+    Both $B$ and $D$ lower & 43/1080 & 4.0\% \\
+    At least one of $B$, $D$ lower & 139/1080 & 12.9\% \\
+    \midrule
+    Mean $B$ reduction (when tightened) & --- & 23.8\% \\
+    Mean $D$ reduction (when tightened) & --- & 32.8\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure2_coefficient_ratios.png}
+  \caption{Resource-aware coefficient ratios relative to the
+    utility-scale baseline over 1{,}080 held-out cases, ordered by
+    ratio (left; the dashed line marks the conventional scale $1.0$),
+    and the reduction distribution conditional on tightening (right).}
+  \label{fig:calib-ratios}
+\end{figure}
+
+\subsubsection{Tightening mechanism}
+
+The opportunity to tighten is governed by whether the minimum
+realizable penalty drop $\Delta = 1$ is reachable for a
+bundle--resource pair.  When $\Delta{=}1$ is reachable, the
+utility-to-drop ratio equals the utility itself and the resource-aware
+bound cannot beat the utility scale for that pair.  As request count
+grows, reachable loads densify and $\Delta{=}1$ cases dominate
+(Fig.~\ref{fig:calib-mechanism}, right): the fraction of violating
+bundle--resource pairs with $\Delta{=}1$ rises from 75\% at $n{=}8$ to
+97\% at $n{=}24$ for edges, and from 58\% to 94\% for memory.  In
+particular, a maximum-utility bundle ($P_0$) pinned to a $\Delta{=}1$
+case contributes $P_0/1 = P_0$ and forces the resource-aware bound
+back to the conventional scale; the $P_0$-pin frequency is 74\%--98\%
+for edges and 88\%--99.7\% for memory across the request-count range.
+Strict tightening correspondingly collapses with contention: $B$ in
+26.1\% of instances at $n{=}8$, 8.6\% at $n{=}16$, and 2.2\% at
+$n{=}24$; $D$ in 12.5\%, 0.8\%, and 0.3\% (Fig.~\ref{fig:calib-mechanism},
+left).  Within each request-count group the $P_0$-pin frequency is
+the exact complement of the strict-tightening frequency, directly
+confirming the saturation mechanism.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure1_mechanism_summary.png}
+  \caption{Calibration mechanism across request counts: strict
+    tightening frequency (left) and the fraction of violating
+    bundle--resource pairs with minimum penalty drop $\Delta{=}1$
+    (right), for edge ($B$) and memory ($D$) penalties.}
+  \label{fig:calib-mechanism}
+\end{figure}
+
+\subsubsection{Matched solver study}
+
+The 139 instances with at least one changed coefficient are solved
+with matched conventional and resource-aware QUBOs using OpenJij SA
+and SQA, five solver seeds (101, 202, 303, 404, 505), and 100 reads
+per run; CP-SAT certifies optimality where available.  Pooled raw
+feasible-read rates are near-identical (SA 0.099 vs.\ 0.086;
+SQA 0.285 vs.\ 0.281), as are repaired optimality gaps (SA 61.0\% vs.\
+60.7\%; SQA 29.1\% vs.\ 29.8\%).  The paired instance-level analysis
+(Fig.~\ref{fig:calib-paired}) confirms this: all four paired
+differences---raw feasibility and repaired gap, for SA and SQA---have
+bootstrap 95\% confidence intervals that include zero
+(Table~\ref{tab:calib-paired}).  Under the tested fixed-budget
+settings, tightening the capacity penalties does not produce a
+detectable systematic SA or SQA performance improvement.
+
+\begin{table}[H]
+  \centering
+  \caption{Paired OpenJij effects (resource-aware minus conventional)
+    on the 139 instances with a coefficient difference, five solver
+    seeds averaged per instance.  All bootstrap 95\% confidence
+    intervals include zero.}
+  \label{tab:calib-paired}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Sampler & Metric & Mean diff. & 95\% CI \\
+    \midrule
+    SA  & Raw feasible-read rate & $-0.0130$ & $[-0.0288,\; 0.0014]$ \\
+    SA  & Repaired optimality gap (pp) & $-0.294$ & $[-1.011,\; 0.401]$ \\
+    SQA & Raw feasible-read rate & $-0.0043$ & $[-0.0475,\; 0.0388]$ \\
+    SQA & Repaired optimality gap (pp) & $+0.699$ & $[-0.785,\; 2.155]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure3_solver_paired_effects.png}
+  \caption{Paired OpenJij effects of resource-aware vs.\ conventional
+    calibration on the 139 instances with a coefficient difference
+    (SA and SQA, five solver seeds, 100 reads).  All bootstrap 95\%
+    confidence intervals include zero.}
+  \label{fig:calib-paired}
+\end{figure}
+
+\paragraph{Takeaway.}
+Resource-aware calibration is best framed as a
+coefficient-tightening method, not a solver improvement: it gives a
+provably no-larger sufficient resource-penalty calibration, produces
+substantially tighter coefficients in identifiable sparse
+reachable-load regimes, and leaves OpenJij solution quality
+statistically unchanged under fixed budgets.  The fixed-budget solver
+evaluation is reported as a negative result: the benefit of
+resource-aware $B/D$ tightening lies in the coefficient itself, not in
+annealing behavior.
+
 \subsection{Temporal-Memory Joint Scheduling}
 \label{sec:results-joint}
 
@@ -1777,8 +1993,12 @@ a 2-link path may be insufficient for a 4-link path.
 \paragraph{Implication:}
 Our direct Hamiltonian (Eq.~\eqref{eq:direct-ham}) mitigates this
 by normalizing penalty scales to the utility range via fixed
-$\lambda$ parameters.  The ablation results confirm that this
-works across all tested configurations without per-instance tuning.
+$\lambda$ parameters.  The conventional utility-scale rule
+(Sec.~\ref{sec:calibration}) makes this normalization explicit, and
+the resource-aware rule tightens it instance-by-instance where
+reachable loads allow; the held-out validation of Sec.~\ref{sec:results-calibration}
+confirms that the ablation-level conclusions hold without
+per-instance tuning.
 
 \subsection{Summary}
 
@@ -2105,6 +2325,13 @@ selections (Sec.~\ref{sec:contention}).
     and a hardware-realistic embedded quantum annealer beats classical
     SA/SQA at a fraction of the wall time
     (Sec.~\ref{sec:results-qa}).
+  \item Resource-aware penalty calibration
+    (Sec.~\ref{sec:results-calibration}) provably never loosens the
+    sufficient coefficients of the utility-scale baseline, tightens
+    $B$/$D$ by $23.8$/$32.8\%$ on average on the $139$ of $1{,}080$
+    held-out instances where tightening binds, and---as a negative
+    result---produces no detectable OpenJij SA/SQA quality change
+    under fixed budgets.
 \end{enumerate}
 
 \subsection{Findings on the Implemented Extensions}
@@ -2157,6 +2384,13 @@ following conclusions to the core results:
   \item \textbf{Learned MPS ordering:} replace the heuristic request
     ordering in the MPS coupling graph with a learned permutation to
     improve bond efficiency on high-treewidth instances.
+  \item \textbf{Coefficient calibration on device:} the held-out
+    calibration study (Sec.~\ref{sec:results-calibration}) is
+    combinatorial and solver-free; porting the resource-aware bound to
+    a live annealer would test whether the coefficient-tightening
+    translates into wall-time or read-count savings at scale, and
+    whether the ``no solver-quality effect'' negative result survives
+    on larger instances and denser topologies.
 \end{enumerate}
 
 \begin{thebibliography}{20}

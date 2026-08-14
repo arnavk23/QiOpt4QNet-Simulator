@@ -4,7 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
-\graphicspath{{../QNet_Sim/results/experiments/figures/}}
+\graphicspath{{../QNet_Sim/results/experiments/figures/}{../QNet_Sim/results/penalty_calibration/figures/}}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \usepackage[margin=0.85in]{geometry}
@@ -70,7 +70,12 @@ $k$-disjoint-path provisioning, swap-tree ordering under memory decay,
 and hardware-parameter profiles---is implemented, unit-tested, and
 reproducible, and delivers every admitted request within coherence at
 mean delivered fidelity $0.30$--$0.51$ where a memory-agnostic baseline
-over-admits.
+over-admits.  A held-out penalty-coefficient calibration study (1{,}080
+instances) shows that a resource-aware rule provably never loosens the
+sufficient penalties of the utility-scale baseline and tightens $B$/$D$
+by $23.8$/$32.8\%$ on average where reachable loads allow, while a
+matched OpenJij study finds no systematic solver-quality effect from
+tightening alone.
 \end{abstract}
 
 \section{Introduction}
@@ -327,6 +332,53 @@ multipliers.  Its $\max(0,\cdot)^2$ structure leaves under-capacity
 configurations unpenalized, avoiding the low-utility basins created by
 squared-deviation slack terms~\cite{nakada2025quick}.
 
+\subsection{Penalty Coefficient Calibration}
+\label{sec:calibration}
+
+The QUBO form requires three hard-constraint penalties: $A$ (at-most-one
+per request), $B$ (edge capacity), and $D$ (memory capacity); in the
+direct form these are the multipliers $\lambda_1,\lambda_2,\lambda_3$.
+Set too low, they under-enforce feasibility; set too high, they flatten
+the objective.  We compare two calibration rules.
+
+\textbf{Conventional (utility-scale).}  All three coefficients are
+anchored to the largest positive bundle utility
+$P_0 = \max_{r,b} \max(0, u_{r,b})$:
+\begin{equation}
+  A = B = D = P_0 + \epsilon,
+  \label{eq:calib-conventional}
+\end{equation}
+with $\epsilon = 10^{-6}P_0$ a small strictly-positive margin.  This
+makes every feasible configuration strictly dominate every infeasible
+one, but applies the same margin to every resource regardless of how
+load interacts with capacity.
+
+\textbf{Resource-aware.}  The request-conflict penalty $A$ stays on the
+conventional scale, while $B$ and $D$ are calibrated from the
+reachable-load structure.  For edge $e$ of capacity $C_e$, let
+$L_e^{\circ}$ be the smallest load reachable on $e$ from the other
+requests' candidate bundles (via bounded dynamic programming) that
+violates capacity together with bundle $(r,b)$ of demand
+$d_{r,b}^e$.  Removing that single bundle reduces the squared-overload
+penalty by
+\begin{equation}
+  \Delta_e(r,b) = \max\!\bigl(0,\, L_e^{\circ} + d_{r,b}^e - C_e\bigr)^2
+    - \max\!\bigl(0,\, L_e^{\circ} - C_e\bigr)^2,
+  \label{eq:calib-drop}
+\end{equation}
+the worst case being the smallest reachable violating load, since the
+drop grows monotonically in $L_e$.  The resource-aware edge coefficient
+is
+\begin{equation}
+  B = \max_{e,(r,b)} \frac{\max(0, u_{r,b})}{\Delta_e(r,b)}
+    + \epsilon,
+  \label{eq:calib-edge}
+\end{equation}
+and $D$ is defined identically over memory resources.  This bound is
+provably no larger than the conventional one---the utility-to-drop
+ratio cannot exceed $P_0$---and is substantially smaller when reachable
+loads leave gaps below capacity.
+
 \subsection{Soft Congestion and Memory Risk}
 \label{sec:congestion-risk}
 
@@ -434,8 +486,12 @@ hyperparameters and guaranteeing feasibility by construction.
 \label{sec:openjij}
 
 We compile the direct Hamiltonian to a QUBO and sample it with
-OpenJij's simulated-annealing sampler~\cite{openjij}.  This serves as
-the reference against which the adaptive top-$k$ reduction
+OpenJij's simulated-annealing sampler~\cite{openjij}.  Penalty
+coefficients $A,B,D$ are set either by the conventional utility-scale
+rule or the proposed resource-aware rule (Sec.~\ref{sec:calibration});
+the two are compared on held-out instances in
+Sec.~\ref{sec:results-calibration}.  OpenJij SA serves as the
+reference against which the adaptive top-$k$ reduction
 (Sec.~\ref{sec:adaptive-qubo}) is measured.
 
 \subsection{Embedded Quantum-Annealing Backend}
@@ -828,6 +884,64 @@ PyTorch-enabled environment.)
   \label{fig:gnn}
 \end{figure}
 
+\subsection{Penalty Coefficient Calibration}
+\label{sec:results-calibration}
+
+We validate both calibration rules on 1{,}080 held-out instances (four
+topology families, instance seeds 10--99, request counts
+$n \in \{8,16,24\}$) before any solver runs.  The resource-aware rule
+strictly tightens $B$ in 133/1080 instances (12.3\%) and $D$ in
+49/1080 (4.5\%); conditional on tightening, $B$ is reduced by 23.8\%
+and $D$ by 32.8\% on average (Fig.~\ref{fig:calib-ratios}).  The
+opportunity is governed by a single mechanism: whether the minimum
+realizable penalty drop $\Delta = 1$ is reachable.  As request count
+grows, the fraction of violating bundle--resource pairs with
+$\Delta{=}1$ rises (edges: 75\% at $n{=}8$ to 97\% at $n{=}24$;
+memory: 58\% to 94\%), and a max-utility bundle pinned to a
+$\Delta{=}1$ case forces the resource-aware bound back to the
+conventional scale; strict tightening correspondingly collapses (Fig.~\ref{fig:calib-mechanism}).
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure1_mechanism_summary.png}
+  \caption{Calibration mechanism: tightening frequency (left) and the
+    fraction of violating bundle--resource pairs whose minimum penalty
+    drop is $\Delta{=}1$ (right), for edge ($B$) and memory ($D$)
+    penalties versus request count.  As reachable loads densify, unit
+    penalty drops pin the resource-aware bound to the utility scale.}
+  \label{fig:calib-mechanism}
+\end{figure}
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure2_coefficient_ratios.png}
+  \caption{Resource-aware coefficient ratios relative to the
+    utility-scale baseline (left, 1{,}080 held-out cases ordered by
+    ratio) and the reduction distribution when tightening occurs
+    (right).}
+  \label{fig:calib-ratios}
+\end{figure}
+
+On the 139 instances where a coefficient changed, matched
+conventional and resource-aware QUBOs were solved with OpenJij SA and
+SQA (five solver seeds, 100 reads).  Neither raw feasibility nor
+repaired optimality gap shows a systematic difference: all paired
+bootstrap 95\% confidence intervals contain zero
+(Fig.~\ref{fig:calib-paired}).  Resource-aware calibration is
+therefore a coefficient-tightening method---it produces provably
+no-larger sufficient penalties, and substantially tighter ones in
+sparse reachable-load regimes---rather than a solver-quality
+improvement.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure3_solver_paired_effects.png}
+  \caption{Paired OpenJij effects of resource-aware vs.\ conventional
+    calibration on the 139 instances with a coefficient difference.
+    All bootstrap 95\% confidence intervals include zero.}
+  \label{fig:calib-paired}
+\end{figure}
+
 \subsection{Stochastic Reliability and Chance-Constrained Routing}
 \label{sec:results-reliability}
 
@@ -1201,8 +1315,12 @@ recovers $100\%$ of failures at $334$--$1065\times$ speedup; (vi)
 candidate reduction, purification, and $k$-disjoint provisioning are
 free-or-beneficial until defined regimes make them bind; (vii)
 balanced swap trees recover up to $1.58\times$ of delivered fidelity
-under memory decay; and (viii) solver quality survives across five
-topology families, degrading gracefully only on scale-free networks.
+under memory decay; (viii) solver quality survives across five
+topology families, degrading gracefully only on scale-free networks;
+and (ix) a held-out calibration study (Sec.~\ref{sec:results-calibration})
+shows resource-aware penalty coefficients are provably no larger than
+the utility-scale baseline and substantially tighter in sparse
+reachable-load regimes, with no detectable OpenJij quality change.
 
 Remaining future work includes: adaptive bond dimension driven by
 truncation error; function-approximation RL that generalizes across
