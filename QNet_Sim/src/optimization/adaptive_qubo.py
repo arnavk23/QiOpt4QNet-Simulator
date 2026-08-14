@@ -135,7 +135,7 @@ def adaptive_qubo_solve(bundles: List[dict], edge_capacities: dict,
 
     t0 = time.perf_counter()
     optimizer = QUBOOptimizer(reduced, edge_capacities, memory_capacities)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+    bqm = optimizer.to_bqm(
                            congestion_penalty=0.0, memory_congestion_penalty=0.0)
     response = solve_sa(bqm, num_reads=num_reads, seed=seed)
     selected = optimizer.decode_sample(response.first.sample, repair=True)
@@ -168,7 +168,7 @@ def run_topk_sweep(topology_fn: Callable, n_requests: int = 16,
     from experiments.instances import contention_sweep_instances
     if k_values is None:
         k_values = [2, 4, 8, 16, 32]
-    inst = contention_sweep_instances(topology_fn, [n_requests], seed=seed)["n%d" % n_requests]
+    inst = contention_sweep_instances(topology_fn, [n_requests], seed=seed)[f"req{n_requests}"]
     bundles, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
 
     ref = reference_solution(bundles, ec, mc, num_reads=num_reads, seed=seed)

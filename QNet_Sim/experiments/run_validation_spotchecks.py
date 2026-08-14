@@ -147,7 +147,7 @@ def main():
             result = opt.solve(**kwargs)
         elif solver_name.startswith("QUBO"):
             opt = QUBOOptimizer(all_bundles, ec, mc)
-            bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+            bqm = opt.to_bqm()
             if kwargs["solve_sa"]:
                 response = solve_sa(bqm, num_reads=20, seed=1)
             else:
@@ -184,7 +184,7 @@ def main():
             result = opt.solve(**kwargs)
         elif solver_name.startswith("QUBO"):
             opt = QUBOOptimizer(all_bundles, ec, mc)
-            bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+            bqm = opt.to_bqm()
             if kwargs["solve_sa"]:
                 response = solve_sa(bqm, num_reads=20, seed=1)
             else:

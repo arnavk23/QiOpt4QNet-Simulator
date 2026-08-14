@@ -16,7 +16,7 @@ def _instance(n_req=6, seed=42):
     topo = generate_chain_topology(n_nodes=6, edge_capacity=4,
                                    memory_capacity=6)
     return contention_sweep_instances(lambda: topo, [n_req], seed=seed)[
-        "n%d" % n_req]
+        f"req{n_req}"]
 
 
 def _flat_bundles():

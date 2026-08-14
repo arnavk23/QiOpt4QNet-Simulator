@@ -334,11 +334,25 @@ class MetropolisAnnealer:
                 repaired[rid] = None
         return repaired
 
-    def solve(self, penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+    def solve(self, penalty=None, edge_penalty=None, memory_penalty=None,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
               max_iterations=5000, initial_temperature=10.0, cooling_rate=0.99,
               steps_per_temperature=50, min_temperature=1e-3, patience=20,
               n_restarts=5, target_accept_rate=0.25, initial_selections=None):
+        # Penalty defaults are anchored to the utility scale (A, B, D just
+        # above the largest positive bundle utility, the manuscript's rule), so
+        # omitting them can never silently under-enforce the at-most-one and
+        # capacity constraints on high-utility instances.
+        if penalty is None or edge_penalty is None or memory_penalty is None:
+            p0 = max((max(0.0, float(u)) for u in self._util_of.values()),
+                     default=0.0)
+            eps = max(1e-9, 1e-6 * p0)
+            if penalty is None:
+                penalty = p0 + eps
+            if edge_penalty is None:
+                edge_penalty = p0 + eps
+            if memory_penalty is None:
+                memory_penalty = p0 + eps
         self._A = penalty
         self._B = edge_penalty
         self._D = memory_penalty

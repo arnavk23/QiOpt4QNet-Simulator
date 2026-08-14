@@ -290,7 +290,10 @@ def fig_hamiltonian_encoding():
     rows = _load(os.path.join(DATA, "hamiltonian_encoding_comparison.csv"))
     forms = ["Slack-QUBO", "Direct-QUBO", "Direct-Metropolis"]
     colors = {"Slack-QUBO": "#d62728", "Direct-QUBO": "#2ca02c", "Direct-Metropolis": "#1f77b4"}
-    instances = sorted(set(r["instance"] for r in rows), key=lambda s: int(s[1:]))
+    def _req_count(name):
+        digits = "".join(ch for ch in name if ch.isdigit())
+        return int(digits) if digits else 0
+    instances = sorted(set(r["instance"] for r in rows), key=_req_count)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.6))
 

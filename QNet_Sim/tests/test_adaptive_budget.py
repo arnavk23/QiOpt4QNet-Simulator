@@ -42,7 +42,7 @@ def test_adaptive_budget_solve_against_ilp():
     topo_fn = _topo_fn()
     import random as _r
     from experiments.instances import contention_sweep_instances
-    inst = contention_sweep_instances(topo_fn, [6], seed=42)["n6"]
+    inst = contention_sweep_instances(topo_fn, [6], seed=42)["req6"]
     b, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
     r = adaptive_budget_solve(b, ec, mc, solver="metropolis", seed=42)
     assert r["utility"] >= 0.0

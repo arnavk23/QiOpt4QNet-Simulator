@@ -88,7 +88,7 @@ class LocalRepair:
 
         t0 = time.perf_counter()
         opt = QUBOOptimizer(reduced, residual_e, residual_m)
-        bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        bqm = opt.to_bqm(
                          congestion_penalty=0.0, memory_congestion_penalty=0.0)
         resp = solve_sa(bqm, num_reads=self.num_reads, seed=self.seed)
         repaired = opt.decode_sample(resp.first.sample, repair=True)
@@ -111,7 +111,7 @@ class FullReoptimizer:
         opt = MetropolisAnnealer(self.bundles, self.edge_capacities,
                                  self.memory_capacities, seed=self.seed)
         t0 = time.perf_counter()
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         elapsed = time.perf_counter() - t0
         return r.get("selected", []), elapsed
@@ -147,7 +147,7 @@ def run_recourse_comparison(topology: dict, n_requests: int = 8,
 
     opt = MetropolisAnnealer(bundles, ec, mc, seed=seed)
     t0 = time.perf_counter()
-    p0 = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+    p0 = opt.solve(
                    max_iterations=3000, n_restarts=1, steps_per_temperature=10)
     plan0 = p0.get("selected", [])
     t_plan = time.perf_counter() - t0

@@ -120,8 +120,12 @@ class BundleGenerator:
             # Base raw fidelity
             f = edge_data.raw_fidelity
             
-            # Apply purification q times
+            # Apply purification q times; pairs at or below the 0.5 threshold
+            # cannot be purified (the BBPSSW map is non-improving there), so
+            # purification rounds are skipped rather than applied as no-ops.
             for _ in range(q):
+                if f <= 0.5:
+                    break
                 f = FidelityModel.purification_bbpssw(f)
                 
             link_fidelities.append(f)

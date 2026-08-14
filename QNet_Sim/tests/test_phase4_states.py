@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import simpy
+import pytest
 
 from models.quantum_state import QuantumState
 from network.node import QuantumNode
@@ -22,6 +23,36 @@ def test_decoherence_kraus():
     assert f < 1.0
     assert f > 0.0
     
+def test_quantum_state_validates_density_matrix():
+    with pytest.raises(ValueError):
+        QuantumState(np.zeros((2, 2)))  # wrong shape
+    with pytest.raises(ValueError):
+        QuantumState(np.eye(4) * 2)  # trace 8, not 1
+    not_hermitian = np.array([[1, 1, 0, 0], [0, 0, 0, 0],
+                              [0, 0, 0, 0], [0, 0, 0, 0]], dtype=complex)
+    with pytest.raises(ValueError):
+        QuantumState(not_hermitian)
+    # a valid mixed (Werner-like) state passes and reports its fidelity
+    bell = np.array([1, 0, 0, 1]) / math.sqrt(2)
+    rho = 0.8 * np.outer(bell, bell.conj()) + 0.2 * np.eye(4) / 4
+    s = QuantumState(rho)
+    assert math.isclose(s.fidelity_with_bell(), 0.85, rel_tol=1e-9)
+
+
+def test_apply_decoherence_validates_parameters():
+    with pytest.raises(ValueError):
+        QuantumState.create_bell_state().apply_decoherence(0.0, 50.0, 10.0)
+    with pytest.raises(ValueError):
+        QuantumState.create_bell_state().apply_decoherence(100.0, -5.0, 10.0)
+    # dt <= 0 is a no-op; positive decay lowers fidelity
+    s = QuantumState.create_bell_state()
+    s.apply_decoherence(100.0, 50.0, 0.0)
+    assert math.isclose(s.fidelity_with_bell(), 1.0, rel_tol=1e-9)
+    s2 = QuantumState.create_bell_state()
+    s2.apply_decoherence(100.0, 50.0, 10.0)
+    assert s2.fidelity_with_bell() < 1.0
+
+
 def test_entanglement_swap_perfect():
     state1 = QuantumState.create_bell_state()
     state2 = QuantumState.create_bell_state()

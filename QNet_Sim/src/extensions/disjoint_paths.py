@@ -221,7 +221,7 @@ def run_disjoint_comparison(topology: dict, n_requests: int = 8,
     for label, bundles in [("single_path", single_b), ("multipath", multi_b)]:
         opt = MetropolisAnnealer(bundles, ec, mc, seed=seed)
         t0 = time.perf_counter()
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         elapsed = time.perf_counter() - t0
         sel = r.get("selected", [])

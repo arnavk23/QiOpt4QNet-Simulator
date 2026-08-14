@@ -20,7 +20,8 @@ dependencies = [
 [project.optional-dependencies]
 baselines = [
     "ortools==9.15.6755",     # exact CP-SAT oracle baseline
-    "scikit-learn==1.7.2"     # legacy ML bundle-ranking baseline
+    "scikit-learn==1.7.2",    # legacy ML bundle-ranking baseline
+    "torch>=2.0"              # GNN bundle-ranking baseline
 ]
 test = [
     "pytest>=9"
@@ -28,6 +29,7 @@ test = [
 all = [
     "ortools==9.15.6755",
     "scikit-learn==1.7.2",
+    "torch>=2.0",
     "pytest>=9"
 ]
 

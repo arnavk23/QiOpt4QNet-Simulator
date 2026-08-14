@@ -252,7 +252,6 @@ class GraphSAGERanker:
                 if msgs[v] is None:
                     continue
                 dS = per_node_grad * (S_act[v] > 0)
-                dA = dS @ self.W.T
                 dW += np.outer(A_act[v], dS)
                 for row in msgs[v]:
                     dW += np.outer(row, dS) / len(msgs[v])
@@ -302,7 +301,7 @@ def gnn_guided_qubo(topology: dict, bundles: List[dict], edge_capacities: dict,
     ranker, reduced, train_loss = gnn_guided_topk(topology, bundles, k=k, seed=seed)
     t0 = time.perf_counter()
     optimizer = QUBOOptimizer(reduced, edge_capacities, memory_capacities)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+    bqm = optimizer.to_bqm(
                            congestion_penalty=0.0, memory_congestion_penalty=0.0)
     response = solve_sa(bqm, num_reads=num_reads, seed=seed)
     selected = optimizer.decode_sample(response.first.sample, repair=True)

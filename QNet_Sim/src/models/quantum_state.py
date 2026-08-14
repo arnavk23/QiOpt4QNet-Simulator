@@ -11,7 +11,19 @@ class QuantumState:
             bell_vec = np.array([1, 0, 0, 1]) / math.sqrt(2)
             self.dm = np.outer(bell_vec, bell_vec.conj())
         else:
-            self.dm = np.array(density_matrix, dtype=complex)
+            dm = np.array(density_matrix, dtype=complex)
+            if dm.shape != (4, 4):
+                raise ValueError(
+                    f"density matrix must be 4x4 (got shape {dm.shape})"
+                )
+            if not np.allclose(dm, dm.conj().T, atol=1e-9):
+                raise ValueError("density matrix must be Hermitian")
+            trace = np.trace(dm).real
+            if not math.isclose(trace, 1.0, abs_tol=1e-8):
+                raise ValueError(
+                    f"density matrix must have unit trace (got {trace})"
+                )
+            self.dm = dm
             
     @classmethod
     def create_bell_state(cls):
@@ -23,9 +35,13 @@ class QuantumState:
         """
         if dt <= 0:
             return
-            
-        p_t1 = math.exp(-dt / t1) if t1 > 0 else 0
-        p_t2 = math.exp(-dt / t2) if t2 > 0 else 0
+        if t1 <= 0 or t2 <= 0:
+            raise ValueError(
+                f"T1 and T2 must be positive or infinite (got t1={t1}, t2={t2})"
+            )
+
+        p_t1 = math.exp(-dt / t1) if t1 < float("inf") else 1.0
+        p_t2 = math.exp(-dt / t2) if t2 < float("inf") else 1.0
         
         # Amplitude Damping Kraus operators for one qubit
         E0_ad = np.array([[1, 0], [0, math.sqrt(p_t1)]])

@@ -58,7 +58,7 @@ def build_openjij_sa(bundles, edge_caps, mem_caps, num_reads=50):
     if not _HAS_PYQUBO:
         raise ImportError("pyqubo is not installed")
     optimizer = QUBOOptimizer(bundles, edge_caps, mem_caps)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+    bqm = optimizer.to_bqm()
     return lambda **kw: _run_openjij(optimizer, bqm, "sa", num_reads, kw.get("seed", None))
 
 
@@ -68,7 +68,7 @@ def build_openjij_sqa(bundles, edge_caps, mem_caps, num_reads=50):
     if not _HAS_PYQUBO:
         raise ImportError("pyqubo is not installed")
     optimizer = QUBOOptimizer(bundles, edge_caps, mem_caps)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+    bqm = optimizer.to_bqm()
     return lambda **kw: _run_openjij(optimizer, bqm, "sqa", num_reads, kw.get("seed", None))
 
 

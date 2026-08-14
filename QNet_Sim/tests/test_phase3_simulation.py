@@ -26,6 +26,54 @@ def test_node_decoherence():
     expected_fidelity = math.exp(-10/100) * math.exp(-10/50)
     assert math.isclose(fidelity, expected_fidelity, rel_tol=1e-5)
     
+def test_calculate_fidelity_uses_stored_state():
+    import math as _math
+    import numpy as np
+    from models.quantum_state import QuantumState
+
+    node = QuantumNode("Node_A", 10, t1=100.0, t2=50.0)
+    mem_ids = node.reserve_memory(1, current_time=0.0)
+    mem_id = mem_ids[0]
+
+    # Werner state with parameter w=2/3 -> fidelity 0.75 with |Phi+>
+    bell = np.array([1, 0, 0, 1]) / _math.sqrt(2)
+    rho_bell = np.outer(bell, bell.conj())
+    w = 2.0 / 3.0
+    rho = w * rho_bell + (1 - w) * np.eye(4) / 4.0
+    state = QuantumState(rho)
+    assert _math.isclose(state.fidelity_with_bell(), 0.75, rel_tol=1e-9)
+
+    node.assign_state(mem_id, state)
+    # at creation time the stored pair's own fidelity is reported, not 1.0
+    assert _math.isclose(node.calculate_fidelity(mem_id, 0.0), 0.75, rel_tol=1e-9)
+    # after 10 time units the same base is decayed by the T1/T2 model
+    expected = 0.75 * _math.exp(-10 / 100) * _math.exp(-10 / 50)
+    assert _math.isclose(node.calculate_fidelity(mem_id, 10.0), expected, rel_tol=1e-9)
+
+
+def test_release_memory_requires_explicit_eviction_policy():
+    node = QuantumNode("Node_A", 10)
+    node.reserve_memory(1, current_time=0.0)  # id 0
+    node.reserve_memory(1, current_time=5.0)  # id 1
+
+    # releasing by amount alone is ambiguous -> error, not a silent assumption
+    with pytest.raises(ValueError):
+        node.release_memory(amount=1)
+
+    node.release_memory(amount=1, eviction="oldest")
+    assert 0 not in node.memory_reservations
+    assert 1 in node.memory_reservations
+
+    node.release_memory(amount=1, eviction="newest")
+    assert node.memory_used == 0
+    assert node.memory_reservations == {}
+
+    # releasing by explicit IDs remains unambiguous
+    node.reserve_memory(2, current_time=1.0)
+    node.release_memory(list(node.memory_reservations.keys()))
+    assert node.memory_used == 0
+
+
 def test_entanglement_generation_protocol():
     env = simpy.Environment()
     

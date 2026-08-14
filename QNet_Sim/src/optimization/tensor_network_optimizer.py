@@ -204,9 +204,21 @@ class TensorNetworkOptimizer:
             pen += self._E * load * load
         return -util + pen + risk
 
-    def solve(self, edge_penalty=10.0, memory_penalty=10.0,
+    def solve(self, edge_penalty=None, memory_penalty=None,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
               bond_dim=8, beta=5.0, max_sweeps=0, mf_iters=25):
+        # Penalty defaults are anchored to the utility scale (B, D just above
+        # the largest positive bundle utility, the manuscript's rule), so
+        # omitting them can never silently under-enforce the capacity
+        # constraints on high-utility instances.
+        if edge_penalty is None or memory_penalty is None:
+            p0 = max((max(0.0, float(u)) for u in self._util_of.values()),
+                     default=0.0)
+            eps = max(1e-9, 1e-6 * p0)
+            if edge_penalty is None:
+                edge_penalty = p0 + eps
+            if memory_penalty is None:
+                memory_penalty = p0 + eps
         self._B = edge_penalty
         self._D = memory_penalty
         self._C = congestion_penalty

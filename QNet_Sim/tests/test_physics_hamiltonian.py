@@ -100,6 +100,18 @@ def test_custom_terms():
     assert e_unsel == 0.0
 
 
+def test_slackfree_default_weights_anchor_to_utility_scale():
+    bundles = [
+        _b("b0", "r1", 200.0, {}, {}),
+        _b("b1", "r1", 150.0, {}, {}),
+    ]
+    h = PhysicalHamiltonian(bundles, {}, {})
+    q, offset = h.to_qubo_slackfree(utility_weight=1.0)  # no explicit weights
+    pair = q.get(("x_0", "x_1"), q.get(("x_1", "x_0"), 0.0))
+    assert pair > 200.0  # one-per-request weight exceeds the utility scale
+    assert offset == 0.0
+
+
 def test_decode():
     bundles = [
         _b("b0", "r1", 10.0, {}, {}),

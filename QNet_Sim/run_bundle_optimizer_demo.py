@@ -55,12 +55,12 @@ def main():
     print(f"Bundles loaded into optimizer: {len(optimizer.bundles)}")
 
     # Build BQM and solve using OpenJij Simulated Annealing (SA)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0)
+    bqm = optimizer.to_bqm()
     sa_response = solve_sa(bqm, num_reads=50)
     selected = optimizer.decode_sample(sa_response.first.sample)
 
     print("\n==================================================")
-    print(f"🎉 OPTIMIZER SELECTION RESULT: {selected}")
+    print(f"   OPTIMIZER SELECTION RESULT: {selected}")
     print(f"   Best QUBO Energy: {sa_response.first.energy:.4f}")
     print("==================================================")
 

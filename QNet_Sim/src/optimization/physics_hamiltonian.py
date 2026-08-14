@@ -193,22 +193,42 @@ class PhysicalHamiltonian:
         return self.energy(selections)
 
     def to_qubo_slackfree(self, utility_weight=1.0,
-                          one_per_request_weight=100.0,
-                          congestion_weight=10.0,
-                          memory_ratio_weight=10.0,
+                          one_per_request_weight=None,
+                          congestion_weight=None,
+                          memory_ratio_weight=None,
                           exponent=2.0) -> Tuple[Dict[Tuple[str, str], float], float]:
         """Extension 12.1: direct (slack-free) effective Hamiltonian.
 
         H = -sum_rb u_{r,b} x_{r,b}
-          + lambda_req sum_r (sum_b x_{r,b} - 1)^2
+          + lambda_req sum_r sum_{b<b'} x_{r,b} x_{r,b'}
           + lambda_cong sum_e (L_e / C_e)^p
           + lambda_mem sum_n (M_n / M_n^max)^p
 
-        with rho(z)=z^p a smooth load-to-capacity ratio penalty.  The only
-        variables are the bundle binaries: no LogEncInteger slack variables,
-        so the QUBO has exactly |B| binaries (vs |B| + slack for Eq. 5.3-5.4).
+        The one-per-request term encodes *at most one* bundle per request
+        (requests may be left unserved), matching the conflict encoding used
+        by the slack QUBO (Eq. 5.3-5.4) and the incremental annealers.
+        rho(z)=z^p is a smooth load-to-capacity ratio penalty (pyqubo cannot
+        express max(0, .) on integer load sums, so the overload-only
+        max(0, L-C)^2 form of the paper is approximated by the ratio term).
+        The only variables are the bundle binaries: no LogEncInteger slack
+        variables, so the QUBO has exactly |B| binaries (vs |B| + slack for
+        Eq. 5.3-5.4).  The penalty weights default to ``max(0, u_{r,b}) + eps``
+        (the manuscript's ``A > max u`` rule), so omitting them never silently
+        under-enforces the at-most-one rule.
         """
         from pyqubo import Binary
+
+        if (one_per_request_weight is None or congestion_weight is None
+                or memory_ratio_weight is None):
+            p0 = max((max(0.0, float(b["utility"])) for b in self.bundles),
+                     default=0.0)
+            eps = max(1e-9, 1e-6 * p0)
+            if one_per_request_weight is None:
+                one_per_request_weight = p0 + eps
+            if congestion_weight is None:
+                congestion_weight = p0 + eps
+            if memory_ratio_weight is None:
+                memory_ratio_weight = p0 + eps
 
         variables = {}
         for i, b in enumerate(self.bundles):
@@ -226,8 +246,12 @@ class PhysicalHamiltonian:
         for rid, bs in req_bundles.items():
             if len(bs) < 2:
                 continue
-            load_expr = sum(variables[(b["request_id"], b["bundle_id"])] for b in bs)
-            hamiltonian += one_per_request_weight * (load_expr - 1) ** 2
+            conflict = sum(
+                variables[(a["request_id"], a["bundle_id"])]
+                * variables[(c["request_id"], c["bundle_id"])]
+                for a, c in combinations(bs, 2)
+            )
+            hamiltonian += one_per_request_weight * conflict
 
         for edge, cap in self.edge_capacities.items():
             if cap <= 0:
