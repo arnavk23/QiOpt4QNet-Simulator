@@ -48,7 +48,14 @@ solver meets or exceeds the Metropolis served ratio (utilities agree
 to within $\sim\!1\%$ wherever the two return identical selections),
 while the MPS compressor is $5$--$4{,}000\times$ faster and the
 exact-ILP benchmark certifies a mean relative optimality gap of $1.5\%$
-for the Metropolis solver.  Beyond the static formulation we develop a
+for the Metropolis solver.  We additionally derive a request-conditioned
+reachable-load calibration for the edge and memory capacity penalties
+that preserves exact ground-state correspondence while never exceeding
+the utility-scale reference bound.  It yields substantially smaller
+coefficients on instances whose reachable-load structure permits
+tightening, with no detectable systematic change in feasibility,
+overload, or repaired solution quality under matched fixed-budget SA
+and SQA.  Beyond the static formulation we develop a
 stochastic reliability framework in which a discrete-event simulator
 executes solver plans under sampled entanglement generation, swap
 failure, T1/T2 decoherence, and fidelity noise.  Within it we (i)
@@ -70,12 +77,7 @@ $k$-disjoint-path provisioning, swap-tree ordering under memory decay,
 and hardware-parameter profiles---is implemented, unit-tested, and
 reproducible, and delivers every admitted request within coherence at
 mean delivered fidelity $0.30$--$0.51$ where a memory-agnostic baseline
-over-admits.  A held-out penalty-coefficient calibration study (1{,}080
-instances) shows that a resource-aware rule provably never loosens the
-sufficient penalties of the utility-scale baseline and tightens $B$/$D$
-by $23.8$/$32.8\%$ on average where reachable loads allow, while a
-matched OpenJij study finds no systematic solver-quality effect from
-tightening alone.
+over-admits. 
 \end{abstract}
 
 \section{Introduction}
@@ -122,10 +124,16 @@ formulation and four extensions toward physical realism:
   \item \textbf{Core QUBO formulation and solver families.}  We
     formalize entanglement routing as a QUBO/Ising energy
     minimization (Sec.~\ref{sec:qubo}), introduce a direct
-    slack-free Hamiltonian with fixed-scale penalties
+    slack-free Hamiltonian
     (Sec.~\ref{sec:direct}), and benchmark Metropolis, boundary-MPS,
     OpenJij simulated annealing, and an embedded quantum-annealing
     backend against an exact-ILP reference (Sec.~\ref{sec:results-core}).
+    We additionally derive a request-conditioned reachable-load
+    calibration of the edge and memory capacity penalties that preserves
+    exact ground-state correspondence while never exceeding the
+    utility-scale reference bound (Sec.~\ref{sec:penalty-calibration}),
+    and evaluate its tightening on 1,080 benchmark instances
+    (Sec.~\ref{sec:results-penalty}).
   \item \textbf{Stochastic reliability framework.}  We execute solver
     plans in a discrete-event simulator (DES) under sampled
     generation, swap, decoherence, and fidelity noise
@@ -134,7 +142,7 @@ formulation and four extensions toward physical realism:
     $\Pr[F_r \ge F_{\min}] \ge 1-\varepsilon$---which we prove, in
     simulation, keeps the empirical SLA-violation probability at or
     below the requested $\varepsilon$ while the hard rule
-    $F \ge F_{\min}$ silently tolerates up to ~1/2 violation for
+    $F \ge F_{\min}$ implicitly tolerates $5$--$14\%$ SLA violation for
     razor-margin bundles (Sec.~\ref{sec:chance}).  We add
     \emph{recourse}---local repair of failed requests---and
     \emph{optimality certification} by exact ILP
@@ -203,6 +211,20 @@ Venegas-Andraca et al.~\cite{venegas2018quantum} survey practical
 quantum annealing on real hardware.  Our quantum-annealing backend
 (Sec.~\ref{sec:qa}) applies this line of work to entanglement routing
 on an embedded hardware lattice.
+
+Penalty weights must exclude infeasible optima without overwhelming
+objective resolution~\cite{verma2022penalty,alessandroni2025bigm}.
+Knapsack studies derive max-profit sufficient
+scales~\cite{quintero2021knapsack,guney2025multiknapsack}, while
+exact, change-ratio, automatic, structure-aware, and SDP-based methods
+use other problem information~\cite{garcia2022exact,
+ayodele2022penalty,liu2025multiple,liu2026structure,
+alessandroni2025bigm}.  Routing work likewise gives a sufficient but
+non-tight coefficient~\cite{seker2024routing}.  Our problem-specific
+certificate combines multiple-choice structure~\cite{sinha1979multiple}
+with attainable-load dynamic programming~\cite{trick2003dynamic},
+bounding utility lost against each reachable removal benefit before
+taking global edge and memory maxima.
 
 \subsection{Tensor Networks for Optimization}
 \label{sec:related-tn}
@@ -303,10 +325,12 @@ $M_v = \sum_{r,b} m_{r,b}^v x_{r,b}$ be the induced edge and memory
 loads.  The penalty-based QUBO is
 \begin{equation}
   \calH = \calH_{\text{util}} + \calH_{\text{one}} + \calH_{\text{edge}} + \calH_{\text{mem}},
+  \label{eq:qubo-ham}
 \end{equation}
 \begin{align}
   \calH_{\text{util}} &= -\sum_{r,b} u_{r,b}\, x_{r,b},\\
-  \calH_{\text{one}} &= A \sum_r \Bigl(\sum_{b} x_{r,b} - 1\Bigr)^2,\\
+  \calH_{\text{one}} &= A \sum_r
+    \sum_{\substack{b,b'\in B_r\\b<b'}} x_{r,b}x_{r,b'},\\
   \calH_{\text{edge}} &= B \sum_e \bigl(L_e + s_e - C_e\bigr)^2,\\
   \calH_{\text{mem}} &= D \sum_v \bigl(M_v + s_v - M_v^{\max}\bigr)^2,
 \end{align}
@@ -314,70 +338,117 @@ where $s_e,s_v$ are slack variables expanded in binary
 ($\mathcal{O}((|E|+|V|)\log_2 C)$ additional variables), and $A,B,D$
 are penalty coefficients.
 
+\subsection{Request-Conditioned Penalty Calibration}
+\label{sec:penalty-calibration}
+
+The calibration applies to the QUBO above with nonnegative integer
+demands and capacities and zero soft-congestion weights.  Because the binary
+slack expansion represents every integer in $0,\ldots,K$, minimizing over it for 
+fixed $x$ turns a capacity term into $[L-K]_+^2$, where $[z]_+=\max(z,0)$.  
+To simplify notation, treat $b\in B_r$ as a request-labelled bundle and 
+write $u_b=u_{r,b}$, $d_{e,b}=d_{r,b}^e$, and $m_{v,b}=m_{r,b}^v$.
+
+Let $u_b^+=[u_b]_+$,
+$P_0=\max(\{u_b^+:b\}\cup\{0\})$, and
+$\epsilon=\max(10^{-9},10^{-6}P_0)$.  The utility-scale reference is
+\begin{equation}
+  A_{\mathrm{ref}}=B_{\mathrm{ref}}=D_{\mathrm{ref}}
+  =P_0+\epsilon.
+  \label{eq:reference-calibration}
+\end{equation}
+This is the max-profit-style sufficient scale used in related
+logarithmic-slack knapsack encodings~\cite{quintero2021knapsack,
+guney2025multiknapsack}.
+
+For bundle $b\in B_r$ and edge $e$, define the co-loads reachable from
+the other requests by
+\begin{equation}
+  \mathcal R_{e,-r}=
+  \left\{\sum_{r'\ne r}d_{e,b_{r'}}:
+    b_{r'}\in B_{r'}\cup\{\varnothing\}\ \forall r'\ne r\right\},
+  \label{eq:reachable-loads}
+\end{equation}
+where $\varnothing$ contributes zero.  If $d_{e,b}>0$ and overload is
+reachable, set
+\begin{align}
+  \rho^*_{e,b}
+    &=\min\{\rho\in\mathcal R_{e,-r}:\rho+d_{e,b}>C_e\},\\
+  \delta_{e,b}
+    &=[\rho^*_{e,b}+d_{e,b}-C_e]_+^2
+      -[\rho^*_{e,b}-C_e]_+^2.
+  \label{eq:edge-penalty-drop}
+\end{align}
+Undefined pairs are omitted.  The memory quantities
+$\mathcal R_{v,-r}$, $\rho^*_{v,b}$, and $\delta_{v,b}$ follow by
+replacing $(e,d_{e,b},C_e)$ with $(v,m_{v,b},M_v^{\max})$.
+For $\rho+d>C$, the penalty decrease from removing a bundle is
+\begin{equation}
+  \Delta(\rho)=
+  \begin{cases}
+    (\rho+d-C)^2, & \rho\le C,\\
+    2d(\rho-C)+d^2, & \rho>C.
+  \end{cases}
+  \label{eq:drop-monotonicity}
+\end{equation}
+Both branches are nondecreasing, so
+$\rho_1\le\rho_2\Rightarrow\Delta(\rho_1)\le\Delta(\rho_2)$.
+Thus $\rho^*$ gives the smallest reachable penalty decrease.  Bounded
+request-wise dynamic programming finds $\rho^*$.
+
+The global coefficients are
+\begin{align}
+  B^*&=\max_{e,b}\frac{u_b^+}{\delta_{e,b}}, &
+  D^*&=\max_{v,b}\frac{u_b^+}{\delta_{v,b}},\\
+  A&=A_{\mathrm{ref}}, &
+  B&=B^*+\epsilon,\qquad D=D^*+\epsilon,
+  \label{eq:reachable-calibration}
+\end{align}
+where the maxima range over positive-demand pairs with defined
+$\rho^*$; an empty maximum is zero.  Thus $B$ and $D$ remain global
+edge and memory coefficients.
+
+\paragraph{Guarantee.}
+Since $A=A_{\mathrm{ref}}>P_0$, deleting the lower-utility of two bundles
+selected for one request lowers $\calH$, so every ground state selects at
+most one bundle per request; the competing load therefore lies in
+$\mathcal R_{e,-r}$.  Now suppose a ground state overloads edge $e$ via a
+selected $b\in B_r$, and let $\rho=\sum_{r'\neq r}d_{e,b_{r'}}$.  Then
+$\rho\in\mathcal R_{e,-r}$ and $\rho+d_{e,b}>C_e$, so
+$\rho\ge\rho^*_{e,b}$ and, by the monotonicity of
+Eq.~\eqref{eq:drop-monotonicity}, $\Delta(\rho)\ge\delta_{e,b}$.
+Removing $b$ then lowers the capacity term by at least
+$B\delta_{e,b}>u_b^+$ while utility rises by at most $u_b^+$, and no
+other term increases---contradicting minimality.  Memory is identical.
+Ground states are thus feasible, all penalties vanish, and
+$\calH=-\sum_b u_bx_b$: the ground states are exactly the maximum-utility
+feasible selections.
+
+\paragraph{Dominance.}
+For integer demands and capacities, integer loads give
+$\delta_{e,b},\delta_{v,b}\ge1$, so $u_b^+/\delta\le u_b^+\le P_0$ and
+hence $B^*,D^*\le P_0$.  Both rules use the same $\epsilon$, so
+$B\le B_{\mathrm{ref}}$ and $D\le D_{\mathrm{ref}}$: each calibrated
+capacity coefficient either decreases or remains equal to its
+utility-scale reference value.
+
 \subsection{Direct Slack-Free Hamiltonian}
 \label{sec:direct}
 
-The slack expansion inflates the variable count and couples the penalty
-scale to the utility range.  Our primary objective is therefore the
-direct form
-\begin{align}
-  \label{eq:direct-ham}
-  \calH_{\text{phys}} &= -\sum_{r,b} u_{r,b}\, x_{r,b}
-    + \lambda_1 \sum_r \Bigl(\textstyle\sum_b x_{r,b} - 1\Bigr)^2\\
-    &\quad + \lambda_2 \sum_e \max(0,\, L_e - C_e)^2
-    + \lambda_3 \sum_v \max(0,\, M_v - M_v^{\max})^2,
-\end{align}
-which uses exactly $\sum_r |B_r|$ binaries and fixed-scale penalty
-multipliers.  Its $\max(0,\cdot)^2$ structure leaves under-capacity
-configurations unpenalized, avoiding the low-utility basins created by
-squared-deviation slack terms~\cite{nakada2025quick}.
-
-\subsection{Penalty Coefficient Calibration}
-\label{sec:calibration}
-
-The QUBO form requires three hard-constraint penalties: $A$ (at-most-one
-per request), $B$ (edge capacity), and $D$ (memory capacity); in the
-direct form these are the multipliers $\lambda_1,\lambda_2,\lambda_3$.
-Set too low, they under-enforce feasibility; set too high, they flatten
-the objective.  We compare two calibration rules.
-
-\textbf{Conventional (utility-scale).}  All three coefficients are
-anchored to the largest positive bundle utility
-$P_0 = \max_{r,b} \max(0, u_{r,b})$:
+The direct form removes the slack variables:
 \begin{equation}
-  A = B = D = P_0 + \epsilon,
-  \label{eq:calib-conventional}
+\begin{aligned}
+  \calH_{\text{phys}}
+  ={}&-\sum_{r,b}u_{r,b}x_{r,b}
+  +\lambda_1\sum_r
+    \sum_{\substack{b,b'\in B_r\\b<b'}}x_{r,b}x_{r,b'}\\
+  &+\lambda_2\sum_e[L_e-C_e]_+^2
+  +\lambda_3\sum_v[M_v-M_v^{\max}]_+^2.
+\end{aligned}
+\label{eq:direct-ham}
 \end{equation}
-with $\epsilon = 10^{-6}P_0$ a small strictly-positive margin.  This
-makes every feasible configuration strictly dominate every infeasible
-one, but applies the same margin to every resource regardless of how
-load interacts with capacity.
-
-\textbf{Resource-aware.}  The request-conflict penalty $A$ stays on the
-conventional scale, while $B$ and $D$ are calibrated from the
-reachable-load structure.  For edge $e$ of capacity $C_e$, let
-$L_e^{\circ}$ be the smallest load reachable on $e$ from the other
-requests' candidate bundles (via bounded dynamic programming) that
-violates capacity together with bundle $(r,b)$ of demand
-$d_{r,b}^e$.  Removing that single bundle reduces the squared-overload
-penalty by
-\begin{equation}
-  \Delta_e(r,b) = \max\!\bigl(0,\, L_e^{\circ} + d_{r,b}^e - C_e\bigr)^2
-    - \max\!\bigl(0,\, L_e^{\circ} - C_e\bigr)^2,
-  \label{eq:calib-drop}
-\end{equation}
-the worst case being the smallest reachable violating load, since the
-drop grows monotonically in $L_e$.  The resource-aware edge coefficient
-is
-\begin{equation}
-  B = \max_{e,(r,b)} \frac{\max(0, u_{r,b})}{\Delta_e(r,b)}
-    + \epsilon,
-  \label{eq:calib-edge}
-\end{equation}
-and $D$ is defined identically over memory resources.  This bound is
-provably no larger than the conventional one---the utility-to-drop
-ratio cannot exceed $P_0$---and is substantially smaller when reachable
-loads leave gaps below capacity.
+It uses exactly $\sum_r |B_r|$ binaries, eliminating the auxiliary
+slacks, while the hinge terms leave under-capacity selections
+unpenalized.
 
 \subsection{Soft Congestion and Memory Risk}
 \label{sec:congestion-risk}
@@ -485,12 +556,12 @@ hyperparameters and guaranteeing feasibility by construction.
 \subsection{OpenJij Simulated Annealing}
 \label{sec:openjij}
 
-We compile the direct Hamiltonian to a QUBO and sample it with
+We compile the penalty-based QUBO to a binary quadratic model and sample it with
 OpenJij's simulated-annealing sampler~\cite{openjij}.  Penalty
 coefficients $A,B,D$ are set either by the conventional utility-scale
-rule or the proposed resource-aware rule (Sec.~\ref{sec:calibration});
+rule or the proposed resource-aware rule (Sec.~\ref{sec:penalty-calibration});
 the two are compared on held-out instances in
-Sec.~\ref{sec:results-calibration}.  OpenJij SA serves as the
+Sec.~\ref{sec:results-penalty}.  OpenJij SA serves as the
 reference against which the adaptive top-$k$ reduction
 (Sec.~\ref{sec:adaptive-qubo}) is measured.
 
@@ -799,6 +870,73 @@ where Metropolis serves $62.5\%$ on the $4\times4$ grid at $N{=}8$).
   \label{fig:grid}
 \end{figure}
 
+\subsection{Penalty Calibration}
+\label{sec:results-penalty}
+
+We compared the two rules on an 8-node chain and $3\times3$ grid with
+$(C_e,M_v^{\max})=(4,8)$, a 10-node chain with $(6,10)$, and a
+$4\times4$ grid with $(5,10)$.  Ninety seeds (10--99) at request
+counts 8, 16, and 24 gave 1,080 instances.  Soft-congestion weights were zero, and ratios strictly below one
+were classified as tightening.
+
+Neither $B/B_{\mathrm{ref}}$ nor $D/D_{\mathrm{ref}}$ exceeded one,
+and $A$ was unchanged (Fig.~\ref{fig:penalty-coefficients}).  The rule
+tightened $B$ in 133 instances, $D$ in 49, and at least one in 139
+($12.9\%$).  Conditional median (mean) reductions were $21.4\%$
+($23.8\%$) for $B$ and $23.4\%$ ($32.8\%$) for $D$.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure2_coefficient_ratios.pdf}
+  \caption{Coefficient tightening across 1,080 instances.  Left:
+    independently ranked $B/B_{\mathrm{ref}}$ and
+    $D/D_{\mathrm{ref}}$; dashed line, reference.  Right: box plots of
+    reductions when tightened ($n_B=133$, $n_D=49$);
+    black dots mark means and hollow circles outliers.}
+  \label{fig:penalty-coefficients}
+\end{figure}
+
+From 8 to 24 requests, the mean $\delta=1$ fraction rose from $75.3\%$
+to $97.0\%$ for edges and from $57.8\%$ to $94.1\%$ for memory, while
+tightening fell from $26.1\%$ to $2.2\%$ and from $12.5\%$ to $0.3\%$,
+respectively (Fig.~\ref{fig:penalty-mechanism}).  This inverse trend is
+consistent with unit drops leaving less room below the reference.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure1_mechanism_summary.pdf}
+  \caption{Tightening frequency (left) and mean within-instance
+    fraction of violating resource--bundle pairs with minimum penalty
+    drop $\delta=1$ (right) versus request count.}
+  \label{fig:penalty-mechanism}
+\end{figure}
+
+The 139 changed instances were evaluated with SA and SQA.  Within each
+sampler, the two arms used the same five seeds and 100 reads per seed.
+Raw feasibility is the unrepaired feasible-read fraction, and overload
+is total edge and memory excess per read.  The repaired gap compares
+the best repaired read with a CP-SAT reference optimized after
+$10^{-3}$ utility rounding but evaluated with unrounded
+utilities~\cite{perron2023cpsat}.  Effects average seeds within each
+instance; 95\% intervals use 10,000 instance bootstrap resamples.
+
+The mean effects (SA, SQA) were $(-1.30,-0.43)$ percentage points for
+feasibility, $(-0.099,-0.014)$ resource units per read for overload
+reduction, and $(0.294,-0.699)$ percentage points for repaired-gap
+reduction (Fig.~\ref{fig:penalty-solver}).  Every interval includes
+zero, so no systematic difference was detected under the tested
+budgets.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=\columnwidth]{figure3_solver_paired_effects.pdf}
+  \caption{Matched effects on the 139 tightened cases.  Points show
+    mean paired differences and lines 95\% bootstrap intervals;
+    overload and gap are oriented as reductions, so positive values
+    favor reachable-load calibration.}
+  \label{fig:penalty-solver}
+\end{figure}
+
 \subsection{Temporal-Memory Joint Scheduling}
 \label{sec:joint-results}
 
@@ -882,64 +1020,6 @@ PyTorch-enabled environment.)
   \caption{Aggregate utility of full-QUBO, adaptive top-$k$, and
     GNN-guided candidate reduction.}
   \label{fig:gnn}
-\end{figure}
-
-\subsection{Penalty Coefficient Calibration}
-\label{sec:results-calibration}
-
-We validate both calibration rules on 1{,}080 held-out instances (four
-topology families, instance seeds 10--99, request counts
-$n \in \{8,16,24\}$) before any solver runs.  The resource-aware rule
-strictly tightens $B$ in 133/1080 instances (12.3\%) and $D$ in
-49/1080 (4.5\%); conditional on tightening, $B$ is reduced by 23.8\%
-and $D$ by 32.8\% on average (Fig.~\ref{fig:calib-ratios}).  The
-opportunity is governed by a single mechanism: whether the minimum
-realizable penalty drop $\Delta = 1$ is reachable.  As request count
-grows, the fraction of violating bundle--resource pairs with
-$\Delta{=}1$ rises (edges: 75\% at $n{=}8$ to 97\% at $n{=}24$;
-memory: 58\% to 94\%), and a max-utility bundle pinned to a
-$\Delta{=}1$ case forces the resource-aware bound back to the
-conventional scale; strict tightening correspondingly collapses (Fig.~\ref{fig:calib-mechanism}).
-
-\begin{figure}[tbp]
-  \centering
-  \includegraphics[width=\columnwidth]{figure1_mechanism_summary.png}
-  \caption{Calibration mechanism: tightening frequency (left) and the
-    fraction of violating bundle--resource pairs whose minimum penalty
-    drop is $\Delta{=}1$ (right), for edge ($B$) and memory ($D$)
-    penalties versus request count.  As reachable loads densify, unit
-    penalty drops pin the resource-aware bound to the utility scale.}
-  \label{fig:calib-mechanism}
-\end{figure}
-
-\begin{figure}[tbp]
-  \centering
-  \includegraphics[width=\columnwidth]{figure2_coefficient_ratios.png}
-  \caption{Resource-aware coefficient ratios relative to the
-    utility-scale baseline (left, 1{,}080 held-out cases ordered by
-    ratio) and the reduction distribution when tightening occurs
-    (right).}
-  \label{fig:calib-ratios}
-\end{figure}
-
-On the 139 instances where a coefficient changed, matched
-conventional and resource-aware QUBOs were solved with OpenJij SA and
-SQA (five solver seeds, 100 reads).  Neither raw feasibility nor
-repaired optimality gap shows a systematic difference: all paired
-bootstrap 95\% confidence intervals contain zero
-(Fig.~\ref{fig:calib-paired}).  Resource-aware calibration is
-therefore a coefficient-tightening method---it produces provably
-no-larger sufficient penalties, and substantially tighter ones in
-sparse reachable-load regimes---rather than a solver-quality
-improvement.
-
-\begin{figure}[tbp]
-  \centering
-  \includegraphics[width=\columnwidth]{figure3_solver_paired_effects.png}
-  \caption{Paired OpenJij effects of resource-aware vs.\ conventional
-    calibration on the 139 instances with a coefficient difference.
-    All bootstrap 95\% confidence intervals include zero.}
-  \label{fig:calib-paired}
 \end{figure}
 
 \subsection{Stochastic Reliability and Chance-Constrained Routing}
@@ -1273,6 +1353,16 @@ are exactly the price of its $46\%$ mean optimality gap
 (Fig.~\ref{fig:opt}).  Reliability analysis is therefore not a
 post-processing nicety but a first-class objective.
 
+\paragraph{Penalty tightening is regime-dependent.}
+Reachable-load calibration changes the sufficient QUBO certificate,
+not the constrained objective.  As request count grows, $\delta=1$
+becomes more common and tightening rarer; this association is
+consistent with the proposed mechanism but is not causal evidence.
+Because every matched interval includes zero, the experiment neither
+establishes solver equivalence nor detects systematic improvement under
+the tested read budgets.  Fixing $A$ isolates capacity calibration;
+joint scaling and hardware-range effects remain open.
+
 \paragraph{Candidate reduction and purification are free until they
 bind.}  Adaptive top-$k$, GNN-guided ranking, and purification-aware
 candidate supersets all leave the reference optimum unchanged on our
@@ -1305,7 +1395,12 @@ deployed quantum networks will require.  The key findings are:
 frontier, with the MPS solver $5$--$4{,}000\times$
 faster and Metropolis within $1.5\%$ of the exact ILP; (ii) the
 direct slack-free Hamiltonian dominates the slack-variable QUBO in
-size and quality; (iii) temporal-memory joint scheduling delivers
+size and quality, while the request-conditioned reachable-load
+calibration preserves exact ground-state correspondence, tightens at
+least one capacity coefficient in $12.9\%$ of benchmark instances, and
+yields no detected systematic SA/SQA difference under the tested read
+budget;
+(iii) temporal-memory joint scheduling delivers
 every admitted request within coherence at fidelity $0.30$--$0.51$,
 where a memory-agnostic baseline over-admits; (iv) chance-constrained
 routing turns the implicit $5$--$14\%$ SLA risk of the deterministic
@@ -1316,11 +1411,7 @@ candidate reduction, purification, and $k$-disjoint provisioning are
 free-or-beneficial until defined regimes make them bind; (vii)
 balanced swap trees recover up to $1.58\times$ of delivered fidelity
 under memory decay; (viii) solver quality survives across five
-topology families, degrading gracefully only on scale-free networks;
-and (ix) a held-out calibration study (Sec.~\ref{sec:results-calibration})
-shows resource-aware penalty coefficients are provably no larger than
-the utility-scale baseline and substantially tighter in sparse
-reachable-load regimes, with no detectable OpenJij quality change.
+topology families, degrading gracefully only on scale-free networks.
 
 Remaining future work includes: adaptive bond dimension driven by
 truncation error; function-approximation RL that generalizes across
@@ -1505,6 +1596,80 @@ A.~Lucas, ``Ising formulations of many NP problems,''
 F.~Glover, G.~Kochenberger, and Y.~Du,
 ``A tutorial on formulating and using QUBO models,''
 \emph{4OR}, vol.~17, pp.~335--369, 2019.
+
+\bibitem{verma2022penalty}
+A.~Verma and M.~Lewis,
+``Penalty and partitioning techniques to improve performance of QUBO
+solvers,''
+\emph{Discrete Optimization}, vol.~44, p.~100594, 2022.
+
+\bibitem{alessandroni2025bigm}
+E.~Alessandroni, S.~Ramos-Calderer, I.~Roth, E.~Traversi, and
+L.~Aolita,
+``Alleviating the quantum Big-M problem,''
+\emph{npj Quantum Information}, vol.~11, p.~125, 2025.
+
+\bibitem{quintero2021knapsack}
+R.~A.~Quintero and L.~F.~Zuluaga,
+``Characterizing and benchmarking QUBO reformulations of the knapsack
+problem,''
+Lehigh University ISE Technical Report 21T-028, 2021.
+
+\bibitem{guney2025multiknapsack}
+E.~G\"uney, J.~Ehrenthal, and T.~Hanne,
+``QUBO formulations and characterization of penalty parameters for
+the multi-knapsack problem,''
+\emph{IEEE Access}, vol.~13, pp.~47086--47098, 2025.
+
+\bibitem{garcia2022exact}
+M.~Diez~Garc\'ia, M.~Ayodele, and A.~Moraglio,
+``Exact and sequential penalty weights in quadratic unconstrained
+binary optimisation with a Digital Annealer,''
+in \emph{Proc. GECCO Companion}, pp.~184--187, 2022.
+
+\bibitem{ayodele2022penalty}
+M.~Ayodele,
+``Penalty weights in QUBO formulations: Permutation problems,''
+in \emph{Evolutionary Computation in Combinatorial Optimization},
+Lecture Notes in Computer Science, vol.~13222, pp.~159--174,
+Springer, 2022.
+
+\bibitem{liu2025multiple}
+J.~Liu and A.~Moraglio,
+``A framework for automatically setting multiple penalty weights in
+quadratic unconstrained binary optimization,''
+in \emph{Proc. GECCO Companion}, pp.~575--578, 2025.
+
+\bibitem{liu2026structure}
+J.~Liu and A.~Moraglio,
+``Structure-aware penalty weights scaling for quadratic unconstrained
+binary optimisation formulation,''
+in \emph{Applications of Evolutionary Computation}, Lecture Notes in
+Computer Science, vol.~16525, pp.~457--472, Springer, 2026.
+
+\bibitem{seker2024routing}
+O.~\c{S}eker, M.~Bodur, and H.~Pouya,
+``Routing and wavelength assignment with protection: A quadratic
+unconstrained binary optimization approach enabled by Digital
+Annealer technology,''
+\emph{IISE Transactions}, vol.~56, no.~2, pp.~156--171, 2024.
+
+\bibitem{sinha1979multiple}
+P.~Sinha and A.~A.~Zoltners,
+``The multiple-choice knapsack problem,''
+\emph{Operations Research}, vol.~27, no.~3, pp.~503--515, 1979.
+
+\bibitem{trick2003dynamic}
+M.~A.~Trick,
+``A dynamic programming approach for consistency and propagation for
+knapsack constraints,''
+\emph{Annals of Operations Research}, vol.~118, pp.~73--84, 2003.
+
+\bibitem{perron2023cpsat}
+L.~Perron, F.~Didier, and S.~Gay,
+``The CP-SAT-LP solver,''
+in \emph{Proc. 29th International Conference on Principles and Practice
+of Constraint Programming}, LIPIcs, vol.~280, pp.~3:1--3:2, 2023.
 
 \bibitem{tanahashi2019application}
 K.~Tanahashi, S.~Takayanagi, T.~Motohashi, and S.~Tanaka,

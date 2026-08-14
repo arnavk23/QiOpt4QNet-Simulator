@@ -216,7 +216,7 @@ def make_figure_2(scan_rows: list[dict[str, str]]) -> None:
             max_rank,
         }
     )
-    ax.set_xlabel("Held-out cases, ordered by ratio")
+    ax.set_xlabel("Benchmark instances ranked by ratio")
     ax.set_ylabel("Coefficient relative to utility-scale baseline")
     ax.set_title("Coefficient ratios")
     ax.set_xlim(1, max_rank)
@@ -303,7 +303,7 @@ def make_figure_3(paired_rows: list[dict[str, str]]) -> None:
         },
         {
             "key": "repaired_optimality_gap_pct",
-            "title": "Repaired optimality gap",
+            "title": "Repaired reference gap",
             "xlabel": "Reduction vs. utility-scale (pp)",
             "multiplier": -1.0,
         },
