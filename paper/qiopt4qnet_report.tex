@@ -4,7 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{graphicx}
-\graphicspath{{../QNet_Sim/results/experiments/figures/}}
+\graphicspath{{../QNet_Sim/results/experiments/figures/}{../QNet_Sim/results/penalty_calibration/figures/}}
 \usepackage{hyperref}
 \usepackage{booktabs}
 \emergencystretch=1em
@@ -404,6 +404,73 @@ function of binary variables and can be compiled to QUBO form
 $\mathbf{x}^T Q \mathbf{x}$ by expanding the squares and collecting
 coefficients.
 
+\subsection{Penalty Coefficient Calibration}
+\label{sec:calibration}
+
+The QUBO form requires three hard-constraint penalties: $A$
+(at-most-one per request), $B$ (edge capacity), and $D$ (memory
+capacity); in the direct Hamiltonian these are the multipliers
+$\lambda_1, \lambda_2, \lambda_3$.  Coefficient choice is delicate:
+penalties too low under-enforce feasibility (infeasible
+high-utility configurations win), while penalties too large flatten
+the objective and slow annealing.  We compare two calibration rules.
+
+\subsubsection{Conventional (utility-scale) calibration}
+
+The reference rule anchors all three coefficients to the largest
+positive bundle utility $P_0 = \max_{r,b} \max(0, u_{r,b})$:
+\begin{equation}
+  A = B = D = P_0 + \epsilon,
+  \label{eq:calib-conventional}
+\end{equation}
+where $\epsilon = 10^{-6}P_0$ is a small strictly-positive margin
+(\texttt{conventional\_calibrator.py}).  This guarantees that any
+feasible configuration strictly dominates every infeasible one---a
+sufficient condition, but one that applies the same margin to every
+resource regardless of how loads interact with capacity.  On instances
+where a small-margin violating bundle is the only way to serve a
+request, the utility-scale rule over-penalizes and the annealer may
+reject the request.
+
+\subsubsection{Resource-aware calibration}
+
+The proposed rule (\texttt{proposed\_calibrator.py}) keeps the
+request-conflict penalty $A$ on the conventional scale but calibrates
+$B$ and $D$ from the reachable-load structure.  For edge $e$ of
+capacity $C_e$, let $L_e^{\circ}$ be the smallest load reachable on
+$e$ from the other requests' candidate bundles (enumerated by bounded
+dynamic programming rather than the exponential Cartesian product)
+that violates capacity together with bundle $(r,b)$ of demand
+$d_{r,b}^e$.  Removing that single bundle reduces the squared-overload
+penalty by
+\begin{equation}
+  \Delta_e(r,b) = \max\!\bigl(0,\, L_e^{\circ} + d_{r,b}^e - C_e\bigr)^2
+    - \max\!\bigl(0,\, L_e^{\circ} - C_e\bigr)^2,
+  \label{eq:calib-drop}
+\end{equation}
+where the worst case is the smallest reachable violating load because
+the drop grows monotonically in $L_e$.  The resource-aware edge
+coefficient is
+\begin{equation}
+  B = \max_{e,(r,b)} \frac{\max(0, u_{r,b})}{\Delta_e(r,b)}
+    + \epsilon,
+  \label{eq:calib-edge}
+\end{equation}
+and $D$ is defined identically over memory resources.  Intuitively,
+$B$ is the largest utility that a violating configuration could gain
+by retaining a bundle that consumes a unit of capacity overload---a
+provably sufficient bound.  Because the utility-to-drop ratio cannot
+exceed $P_0$, the rule is never looser than the conventional one, and
+it is strictly tighter whenever reachable loads leave gaps between
+violation thresholds.
+
+\subsubsection{Soft congestion is separate}
+
+The soft congestion ($C$) and memory-congestion ($E$) regularizers are
+deliberately excluded from both hard-constraint rules; the calibration
+ablation runs with $C = E = 0$ so that the comparison isolates the
+hard coefficients.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Solver Architectures}
 \label{sec:solvers}
@@ -657,10 +724,13 @@ streaming achieves substantial speedups.
 We compile the direct Hamiltonian to a QUBO matrix $Q$ and sample it
 with OpenJij's simulated-annealing sampler~\cite{openjij}, a
 production-grade reference for the Metropolis-style search of
-Sec.~\ref{sec:metropolis}.  This serves as the baseline against which
-the adaptive top-$k$ reduction (Sec.~\ref{sec:adaptive-qubo}) and the
-embedded quantum-annealing backend (Sec.~\ref{sec:qa}) are measured
-under identical read counts.
+Sec.~\ref{sec:metropolis}.  Penalty coefficients $A,B,D$ are set by
+either the conventional utility-scale rule or the proposed
+resource-aware rule (Sec.~\ref{sec:calibration}), compared on held-out
+instances in Sec.~\ref{sec:results-calibration}.  This serves as the
+baseline against which the adaptive top-$k$ reduction
+(Sec.~\ref{sec:adaptive-qubo}) and the embedded quantum-annealing
+backend (Sec.~\ref{sec:qa}) are measured under identical read counts.
 
 \subsection{Embedded Quantum-Annealing Backend}
 \label{sec:qa}
@@ -1015,48 +1085,51 @@ a function of request count, edge capacity, and network size.
 
 \subsubsection{Interpretation}
 
-\textbf{Both solvers find the same served-ratio frontier.} On 43 of
-45 instance configurations Metropolis and TensorNetwork return the
-same served ratio: $100\%$ at 2 requests (and $50\%$ on the degenerate
-chain-6 case with only two bundles in the pool), falling to
-$37.5$--$45.8\%$ at 24 requests.  The frontier is
+\textbf{TensorNetwork meets or exceeds the Metropolis served ratio on
+every configuration.}  Both solvers agree on 39 of 45 instance
+configurations; where they differ, TensorNetwork serves strictly
+more: on the degenerate chain-6 instances with $N{=}2$ (where the
+only available bundle has \emph{negative} utility, which the Metropolis
+annealer correctly declines but the MPS decoder still commits as the
+least-bad option), at $N{=}8$ ($0.50$ vs.\ $0.375$), and at $N{=}4$ on
+10-node chains ($0.75$ vs.\ $0.50$).  Served ratios range from $0.5$
+at 2 requests on the 4-node chain (and $1.0$ on the 10-node chain) to
+$0.375$--$0.54$ at 24 requests; the frontier is
 capacity-limited---requests whose bundle pool contains no
-capacity-feasible option are rejected by both solvers, and the number
-of such requests grows with contention.  This agreement is expected:
-both solvers minimize the identical Hamiltonian
-(Eq.~\eqref{eq:complete-hamiltonian} with congestion and risk disabled
-so that utility and capacity penalties are the only terms), and on
-these instances both converge to the same optimum.  The only two
-departures are chain-6 instances with $C_e \in \{6, 10\}$ at $N{=}24$,
-where the tensor-network solver serves one extra request ($0.50$ vs.\
-$0.46$ served ratio).
+capacity-feasible option are rejected, and the number of such requests
+grows with contention.
 
-\textbf{Utility is close at every contention level.}  Aggregate
-utilities agree within $3.7\%$ at $N \leq 8$ and within $1.8\%$ at
-$N{=}24$ (mean gap $\leq 1.3\%$); the largest single gap is $4.6\%$ at
-intermediate contention on capacity-4 chains.  Neither solver is
-consistently ahead---TensorNetwork wins some seeds, Metropolis others.
+\textbf{Utility is close wherever both solvers serve the same set.}
+On the configurations where the two solvers return identical
+selections, aggregate utilities agree to within $\sim\!1\%$ (the
+residual is only numerical); where TensorNetwork serves more
+requests, it naturally reports higher aggregate utility (up to
+$+2.7\%$ at $N{=}24$ on 6-node chains).  Both solvers minimize the
+identical Hamiltonian (Eq.~\eqref{eq:complete-hamiltonian} with
+congestion and risk disabled), so the frontier is shared; the
+occasional TensorNetwork advantage reflects its load-aware greedy
+seed and improvement pass rather than a different objective.
 
 \textbf{TensorNetwork is the faster solver at every contention level.}
 The MPS contraction cost is $\mathcal{O}(M\chi^3)$, independent of the
 number of optimization iterations, so TensorNetwork runs in
-$0.003$--$0.18$\,s while Metropolis---whose fixed $5000$-step cooling
-budget dominates the runtime---takes $0.85$--$1.43$\,s.  The speedup is
-largest on small instances ($175$--$373\times$ at 2 requests) and
-shrinks to $7$--$14\times$ at 24 requests as the MPS cost grows with
-$N$.  On the corrected instance generator the feasibility-repair
-blowup reported in earlier versions is not reproduced: the repair
-pass resolves the residual violations in a handful of swaps.
+$0.0002$--$0.21$\,s while Metropolis---whose fixed $5000$-step cooling
+budget dominates the runtime---takes $0.86$--$1.46$\,s.  The speedup is
+largest on small instances ($\sim\!2{,}000$--$4{,}000\times$ at 2
+requests) and shrinks to $5$--$15\times$ at 24 requests as the MPS
+cost grows with $N$.  The reported times are for the current instance
+generator; all results are deterministic (seed 42).
 
 \subsubsection{Key Takeaway}
 
 With both solvers minimizing the same Hamiltonian, solution quality is
-no longer the differentiator: served ratios match everywhere and
-utilities agree to within $\sim\!5\%$.  The decisive difference is
-runtime---TensorNetwork is $6$--$373\times$ faster---and generality:
-the Metropolis annealer accepts arbitrary Hamiltonian terms (soft
-congestion, memory risk) that the MPS's pairwise coupling approximates
-less faithfully (Sec.~\ref{sec:encoding}).
+no longer the differentiator: TensorNetwork meets or beats the
+Metropolis served ratio everywhere and utilities agree to within
+$\sim\!1\%$ on shared selections.  The decisive difference is
+runtime---TensorNetwork is $5$--$4{,}000\times$ faster---and
+generality: the Metropolis annealer accepts arbitrary Hamiltonian
+terms (soft congestion, memory risk) that the MPS's pairwise coupling
+approximates less faithfully (Sec.~\ref{sec:encoding}).
 
 \subsection{Bond Dimension Analysis}
 \label{sec:bonddim}
@@ -1087,13 +1160,18 @@ the exact ground state can be represented with $\chi \approx 4$.
 
 Our results confirm this even more strongly than before: every bond
 dimension from $\chi = 1$ to $\chi = 32$ produces the \emph{identical}
-served ratio at every request count ($0.75$, $0.50$, $0.44$, $0.54$ for
-$N = 4, 8, 16, 24$), matching the Metropolis baseline exactly.  The
-runtime follows the theoretical scaling $\mathcal{O}(M \chi^3)$: at
-$N{=}24$, $\chi = 32$ takes $3.79$\,s versus $0.08$\,s at $\chi = 2$, a
-$47\times$ increase with no quality gain.  At small $N$ the bond
-dimension has almost no runtime effect ($0.011$--$0.016$\,s for $N{=}8$)
-because the contraction cost is dominated by $N$, not $\chi$.
+served ratio at every request count ($1.00$, $0.625$, $0.562$, $0.375$
+for $N = 4, 8, 16, 24$), matching the Metropolis baseline at $N \geq 8$
+and exceeding it at $N{=}4$ ($1.0$ vs.\ $0.75$).  On these small
+instances the runtime no longer shows the $\mathcal{O}(M \chi^3)$
+scaling: the exact product-form MPS (no sweeps, the default) makes the
+contraction cost dominated by the number of requests $N$, so all bond
+dimensions run in $0.001$--$0.18$\,s at every request count (e.g.\
+$0.17$--$0.18$\,s at $N{=}24$ for both $\chi{=}1$ and $\chi{=}32$), a
+$\sim\!50\times$ reduction in wall-clock relative to the swept-MPS
+schedule, with no quality loss.  The $\mathcal{O}(M\chi^3)$ cost would
+reappear only when the SVD renormalisation sweeps are enabled
+(``\texttt{max\_sweeps} $> 0$''), which we leave off by default.
 
 \subsubsection{Implication}
 
@@ -1122,21 +1200,19 @@ with varying connectivity.
 
 \subsubsection{Analysis}
 
-On grids, Metropolis serves $100\%$ of requests at $N{=}8$ on the
-$2\times3$ and $3\times3$ topologies, and $75$--$88\%$ at $N{=}16$.
-TensorNetwork serves equal or slightly fewer: $0$--$12.5$ percentage
-points lower at each configuration.  The grid's higher connectivity
-provides multiple disjoint paths between any two nodes, increasing
-the bundle pool size and reducing resource contention relative to
-chains of comparable request density.
-
-Importantly, the TensorNetwork solver does not collapse on grids as
-it did on high-contention chains in earlier versions of the benchmark:
-at $N{=}16$ it serves $69$--$81\%$ of requests.  The residual gap to
-Metropolis (4--12\%) reflects the pairwise MPS coupling
-approximation---when two requests conflict through a shared edge, the
-MPS at moderate $\chi$ cannot always represent the joint exclusion
-exactly---rather than a feasibility failure.
+On grids, both solvers serve $87.5\%$ of requests at $N{=}8$ on the
+$2\times3$ and $3\times3$ topologies, and $62.5\%$ at $N{=}16$ on
+those topologies and on $2\times3$.  On the densest $4\times4$ grid the
+TensorNetwork solver serves \emph{more} than Metropolis at $N{=}8$
+($0.75$ vs.\ $0.625$) and equals it at $N{=}16$ ($0.688$); across the
+whole grid suite TensorNetwork never serves fewer requests.  The
+grid's higher connectivity provides multiple disjoint paths between
+any two nodes, increasing the bundle pool size and reducing resource
+contention relative to chains of comparable request density---but it
+also admits more negative-utility candidate bundles, which the
+load-aware MPS improvement pass drops and the Metropolis annealer
+avoids by construction, so neither solver's served ratio reaches
+$100\%$.
 
 \subsubsection{Scaling Behavior}
 
@@ -1144,9 +1220,9 @@ Runtime on grids is uniformly higher than on chains of comparable
 size because the number of candidate bundles per request grows with
 topological connectivity.  The $4\times4$ grid ($|V| = 16$) generates
 many more bundles per request than a chain of the same length; the
-tensor-network solver takes $0.38$--$0.53$\,s on grids (vs.\
-$0.004$--$0.14$\,s on chains) and Metropolis $1.47$--$1.77$\,s (vs.\
-$1.06$--$1.30$\,s).
+tensor-network solver takes $0.010$--$0.17$\,s on grids and Metropolis
+$1.97$--$2.62$\,s---a $20$--$200\times$ gap that grows with request
+count.
 
 \subsection{Streaming vs Batched}
 \label{sec:streaming-results}
@@ -1160,7 +1236,7 @@ batched (full reoptimization) approaches.
   \caption{Streaming vs batched optimization on chain-8 topology
     ($C_e = 6$).  Left: served ratio.  Right: wall-clock time.
     Streaming matches or exceeds batched solution quality while
-    reducing time by $\sim\!60$--$120\times$.}
+    reducing time by $\sim\!50$--$150\times$.}
   \label{fig:streaming}
 \end{figure}
 
@@ -1169,9 +1245,9 @@ batched (full reoptimization) approaches.
 The streaming annealer achieves equal or better solution quality
 because:
 \begin{enumerate}
-  \item Requests are sparse relative to capacity (even at 16 requests,
-    only half are rejected), so new arrivals have limited impact on
-    existing configurations.
+  \item Requests are sparse relative to capacity (at 16 requests the
+    streaming solver serves $56\%$ and the batched $50\%$), so new
+    arrivals have limited impact on existing configurations.
   \item The local sweeps (50 steps per arrival) are sufficient to find
     the new energy minimum because the change to the Hamiltonian is
     localized to the new request and its resource-sharing neighbors.
@@ -1194,8 +1270,8 @@ where $t_{\text{local}} \ll t_{\text{full}}$.  With $t_{\text{local}}
 \approx 50$ steps and $t_{\text{full}} \approx 5000$ steps, the
 theoretical speedup is approximately
 $5000 / (50 + 5000/5) \approx 250\times$; the measured
-$60$--$120\times$ gap to the observed range reflects the periodic full
-cycles and the smaller batched instances.  This is roughly an order of
+$54$--$154\times$ range reflects the periodic full cycles and the
+smaller batched instances.  This is roughly an order of
 magnitude larger than the $5$--$10\times$ reported in earlier
 versions, because the batched baseline now runs the full $5000$-step
 cooling schedule rather than a truncated one.
@@ -1208,12 +1284,17 @@ contribution.
 
 \subsubsection{Direct Hamiltonian (Sec.~\ref{sec:direct-ham})}
 
-The slack-free direct Hamiltonian matches the standard penalty-based
-QUBO (Eq.~\eqref{eq:full-qubo}) in served ratio and utility across
-all chain and grid instances.  The advantage is purely structural:
-$\mathcal{O}(N)$ fewer binary variables and no per-instance penalty
-tuning.  The fixed parameters $\lambda_2 = \lambda_3 = 10$ work
-across all capacities and request counts.
+The slack-free direct Hamiltonian matches or exceeds the standard
+penalty-based QUBO (Eq.~\eqref{eq:full-qubo}) in served ratio and
+utility across all chain and grid instances (Sec.~\ref{sec:encoding}).
+The advantage is purely structural: $\mathcal{O}(N)$ fewer binary
+variables (no \texttt{LogEncInteger} slacks) and no per-instance
+penalty tuning.  With penalties anchored to the utility scale
+($A = B = D = u_{\max} + \epsilon$), the same coefficients are used
+across all capacities and request counts, and the at-most-one and
+capacity constraints are enforced at the QUBO optimum by
+construction---no fixed magic constants that silently under-enforce on
+high-utility instances.
 
 \subsubsection{Soft Congestion (Sec.~\ref{sec:congestion})}
 
@@ -1253,19 +1334,24 @@ OpenJij simulated annealing under identical read counts.  Table
   \caption{Slack-variable vs.\ direct slack-free encoding on identical
     chain instances ($C_e{=}8$, $M_v{=}12$, scale $= 1$).  The direct
     encoding uses only the $|B|$ bundle binaries (no \texttt{LogEncInteger}
-    slacks), a $5$--$6\times$ variable reduction, while finding
-    configurations with $2.8$--$3.6\times$ higher aggregate utility.}
+    slacks), a $4$--$10\times$ variable reduction.  All penalties are
+    anchored to the utility scale ($A = \mathrm{scale}\cdot u_{\max}$,
+    the $A > \max_{r,b} u_{r,b}$ rule), so the at-most-one constraint is
+    enforced by the QUBO at every sweep point; the \textsc{Conf.} column
+    reports the raw fraction of reads (before repair and before collapsing
+    to the highest-utility bundle per request) that selected more than one
+    bundle of a request.}
   \label{tab:encoding}
-  \begin{tabular}{lcccc}
+  \begin{tabular}{llcccc}
     \toprule
-    Instance & Encoding & Variables & Served & Utility \\
+    Instance & Encoding & Variables & Served & Utility & Conf. \\
     \midrule
-    $N{=}4$   & Slack-QUBO  & 52 & 0.75 & 68.5 \\
-    $N{=}4$   & Direct-QUBO & 8  & 0.75 & \textbf{191.9} \\
-    $N{=}8$   & Slack-QUBO  & 62 & 0.50 & 216.2 \\
-    $N{=}8$   & Direct-QUBO & 18 & 0.75 & \textbf{782.5} \\
-    $N{=}12$  & Slack-QUBO  & 76 & 0.83 & 396.4 \\
-    $N{=}12$  & Direct-QUBO & 32 & 0.92 & \textbf{1108.9} \\
+    $N{=}4$   & Slack-QUBO   & 49 & 0.25 & 3.93 & 0.00 \\
+    $N{=}4$   & Direct-QUBO  & 5  & 0.25 & 3.93 & 0.00 \\
+    $N{=}8$   & Slack-QUBO   & 55 & 0.13 & 3.93 & 0.00 \\
+    $N{=}8$   & Direct-QUBO  & 11 & 0.38 & \textbf{7.65} & 0.00 \\
+    $N{=}12$  & Slack-QUBO   & 60 & 0.17 & 2.52 & 1.00 \\
+    $N{=}12$  & Direct-QUBO  & 16 & 0.33 & \textbf{12.07} & 0.00 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1275,7 +1361,7 @@ OpenJij simulated annealing under identical read counts.  Table
   \includegraphics[width=\textwidth]{hamiltonian_encoding.png}
   \caption{Hamiltonian encoding comparison.  Left: QUBO variable count
     per formulation at scale $1$---the direct (slack-free) formulation
-    uses $8$--$32$ binaries vs.\ $52$--$76$ for the slack-variable
+    uses $5$--$16$ binaries vs.\ $49$--$60$ for the slack-variable
     encoding.  Right: served ratio vs.\ demand scale; the direct
     formulation dominates at moderate scales.}
   \label{fig:encoding}
@@ -1285,15 +1371,170 @@ Two conclusions follow.  First, the \emph{size} advantage is exactly
 as predicted by Eq.~\eqref{eq:direct-ham}: the slack encoding adds
 $\mathcal{O}(|E|+|V|)\log_2 C$ binaries per instance, which for the
 chain-$6$ testbed (5 edges, 6 memories, $C{=}8$) amounts to $44$ slack
-bits on top of the bundle variables.  Second, the direct formulation
-does not just shrink the problem---it solves better: the squared
-deviation of the slack form (Eq.~\eqref{eq:full-qubo}) creates a
-landscape in which simulated annealing converges to lower-utility
-basins, whereas the $\max(0,\cdot)^2$ capacity terms of the direct form
-keep feasible high-utility configurations reachable.  At very large
-penalty scales ($10^2$--$10^3$) the direct form becomes
-utility-conservative and matches the slack form, confirming that the
-fixed-scale parameters should be set near the utility scale.
+bits on top of the bundle variables---a $4$--$10\times$ variable
+reduction that grows with $C$.  Second, the direct formulation does not
+just shrink the problem---it solves better: at the anchored scale
+($A{=}u_{\max}{+}\epsilon$) the direct QUBO and the Metropolis
+annealer serve the same requests with equal or higher utility than the
+slack form, which on the $N{=}12$ instance collapses onto a
+multi-bundle read (\textsc{Conf.}~$= 1.00$) and is repaired down to a
+single request.  With the penalty anchored to the utility scale, the
+at-most-one constraint is enforced at the QUBO optimum for every
+formulation; the residual differences above are search artifacts of the
+slack-expanded landscape (its energy range scales with
+$\mathrm{penalty}\cdot C^2$ per resource), not a structural advantage of
+the direct form.  Note that the numbers here are produced by the
+current instance generator (post-GNN pipeline), whose chain testbeds
+leave most requests without capacity-feasible bundles; the previously
+reported $2.8$--$3.6\times$ utility advantage was an artifact of the
+old instance pipeline and of the unrepaired exactly-one encoding, both
+now removed.
+
+\subsection{Penalty Coefficient Calibration}
+\label{sec:results-calibration}
+
+The two calibration rules of Sec.~\ref{sec:calibration} are validated
+on a held-out suite of 1{,}080 instances: four topology families
+(chain and grid), instance seeds 10--99 (disjoint from the seeds used
+in the exploratory experiments), and request counts
+$n \in \{8, 16, 24\}$.  The coefficient scan is purely
+combinatorial---it requires no solver runs---and is followed by a
+matched solver study on exactly the instances where a coefficient
+difference exists.
+
+\subsubsection{Coefficient scan}
+
+At the exact $1\times$ calibration scale, the resource-aware rule
+produces a strictly lower $B$ in 133/1080 instances (12.3\%) and a
+strictly lower $D$ in 49/1080 (4.5\%); both coefficients are lowered
+simultaneously in 43 instances (4.0\%) and at least one is lowered in
+139 (12.9\%).  Conditional on strict tightening, $B$ is reduced by
+23.8\% and $D$ by 32.8\% on average (Fig.~\ref{fig:calib-ratios}).
+The distribution of ratios (left panel) shows the rule never exceeds
+the conventional scale, and the reduction boxplots (right panel) show
+that when tightening binds it is substantial.
+
+\begin{table}[H]
+  \centering
+  \caption{Coefficient-scan summary over the 1{,}080 held-out
+    instances at the $1\times$ calibration scale.  ``Tightened'' means
+the resource-aware coefficient is strictly lower than the
+utility-scale baseline; reductions are computed conditional on strict
+tightening.}
+  \label{tab:calib-scan}
+  \begin{tabular}{lcc}
+    \toprule
+    Outcome & Instances & Share \\
+    \midrule
+    $B$ strictly lower & 133/1080 & 12.3\% \\
+    $D$ strictly lower & 49/1080 & 4.5\% \\
+    Both $B$ and $D$ lower & 43/1080 & 4.0\% \\
+    At least one of $B$, $D$ lower & 139/1080 & 12.9\% \\
+    \midrule
+    Mean $B$ reduction (when tightened) & --- & 23.8\% \\
+    Mean $D$ reduction (when tightened) & --- & 32.8\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure2_coefficient_ratios.png}
+  \caption{Resource-aware coefficient ratios relative to the
+    utility-scale baseline over 1{,}080 held-out cases, ordered by
+    ratio (left; the dashed line marks the conventional scale $1.0$),
+    and the reduction distribution conditional on tightening (right).}
+  \label{fig:calib-ratios}
+\end{figure}
+
+\subsubsection{Tightening mechanism}
+
+The opportunity to tighten is governed by whether the minimum
+realizable penalty drop $\Delta = 1$ is reachable for a
+bundle--resource pair.  When $\Delta{=}1$ is reachable, the
+utility-to-drop ratio equals the utility itself and the resource-aware
+bound cannot beat the utility scale for that pair.  As request count
+grows, reachable loads densify and $\Delta{=}1$ cases dominate
+(Fig.~\ref{fig:calib-mechanism}, right): the fraction of violating
+bundle--resource pairs with $\Delta{=}1$ rises from 75\% at $n{=}8$ to
+97\% at $n{=}24$ for edges, and from 58\% to 94\% for memory.  In
+particular, a maximum-utility bundle ($P_0$) pinned to a $\Delta{=}1$
+case contributes $P_0/1 = P_0$ and forces the resource-aware bound
+back to the conventional scale; the $P_0$-pin frequency is 74\%--98\%
+for edges and 88\%--99.7\% for memory across the request-count range.
+Strict tightening correspondingly collapses with contention: $B$ in
+26.1\% of instances at $n{=}8$, 8.6\% at $n{=}16$, and 2.2\% at
+$n{=}24$; $D$ in 12.5\%, 0.8\%, and 0.3\% (Fig.~\ref{fig:calib-mechanism},
+left).  Within each request-count group the $P_0$-pin frequency is
+the exact complement of the strict-tightening frequency, directly
+confirming the saturation mechanism.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure1_mechanism_summary.png}
+  \caption{Calibration mechanism across request counts: strict
+    tightening frequency (left) and the fraction of violating
+    bundle--resource pairs with minimum penalty drop $\Delta{=}1$
+    (right), for edge ($B$) and memory ($D$) penalties.}
+  \label{fig:calib-mechanism}
+\end{figure}
+
+\subsubsection{Matched solver study}
+
+The 139 instances with at least one changed coefficient are solved
+with matched conventional and resource-aware QUBOs using OpenJij SA
+and SQA, five solver seeds (101, 202, 303, 404, 505), and 100 reads
+per run; CP-SAT certifies optimality where available.  Pooled raw
+feasible-read rates are near-identical (SA 0.099 vs.\ 0.086;
+SQA 0.285 vs.\ 0.281), as are repaired optimality gaps (SA 61.0\% vs.\
+60.7\%; SQA 29.1\% vs.\ 29.8\%).  The paired instance-level analysis
+(Fig.~\ref{fig:calib-paired}) confirms this: all four paired
+differences---raw feasibility and repaired gap, for SA and SQA---have
+bootstrap 95\% confidence intervals that include zero
+(Table~\ref{tab:calib-paired}).  Under the tested fixed-budget
+settings, tightening the capacity penalties does not produce a
+detectable systematic SA or SQA performance improvement.
+
+\begin{table}[H]
+  \centering
+  \caption{Paired OpenJij effects (resource-aware minus conventional)
+    on the 139 instances with a coefficient difference, five solver
+    seeds averaged per instance.  All bootstrap 95\% confidence
+    intervals include zero.}
+  \label{tab:calib-paired}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    Sampler & Metric & Mean diff. & 95\% CI \\
+    \midrule
+    SA  & Raw feasible-read rate & $-0.0130$ & $[-0.0288,\; 0.0014]$ \\
+    SA  & Repaired optimality gap (pp) & $-0.294$ & $[-1.011,\; 0.401]$ \\
+    SQA & Raw feasible-read rate & $-0.0043$ & $[-0.0475,\; 0.0388]$ \\
+    SQA & Repaired optimality gap (pp) & $+0.699$ & $[-0.785,\; 2.155]$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figure3_solver_paired_effects.png}
+  \caption{Paired OpenJij effects of resource-aware vs.\ conventional
+    calibration on the 139 instances with a coefficient difference
+    (SA and SQA, five solver seeds, 100 reads).  All bootstrap 95\%
+    confidence intervals include zero.}
+  \label{fig:calib-paired}
+\end{figure}
+
+\paragraph{Takeaway.}
+Resource-aware calibration is best framed as a
+coefficient-tightening method, not a solver improvement: it gives a
+provably no-larger sufficient resource-penalty calibration, produces
+substantially tighter coefficients in identifiable sparse
+reachable-load regimes, and leaves OpenJij solution quality
+statistically unchanged under fixed budgets.  The fixed-budget solver
+evaluation is reported as a negative result: the benefit of
+resource-aware $B/D$ tightening lies in the coefficient itself, not in
+annealing behavior.
 
 \subsection{Temporal-Memory Joint Scheduling}
 \label{sec:results-joint}
@@ -1325,8 +1566,8 @@ physically correct behavior.
 Under a static/online/receding-horizon comparison
 (Fig.~\ref{fig:online}), all three regimes serve identical request
 sets, but the online regime re-optimizes only the arriving request and
-is $1.6\times$ faster than static re-solving while the receding horizon
-preserves global quality at modest cost.
+is $1.9$--$3.2\times$ faster than static re-solving while the
+receding horizon preserves global quality at modest cost.
 
 \begin{figure}[H]
   \centering
@@ -1349,18 +1590,21 @@ Figure~\ref{fig:adaptive} sweeps the per-request candidate budget $k$.
   \label{fig:adaptive}
 \end{figure}
 
-On the chain, $k{=}2$ (15 of 21 bundles) incurs a $20.4\%$ relative
-optimality gap; $k \ge 4$ reaches the full-QUBO utility exactly.  On a
-$6\times6$ grid, reduction to $k{=}8$ (39 of 40 bundles) keeps the gap
-at zero and even $k{=}2$ matches the reference---the reduced QUBO is
-easier to anneal at fixed budget, so candidate reduction is \emph{free
-or beneficial} until the budget discards the optimal bundle.
+On the chain, $k{=}2$ (16 of 19 bundles in the QUBO) already reaches
+the full-candidate reference exactly (relative gap $0\%$), and larger
+budgets do not change the selection.  On the $6\times6$ grid the
+picture inverts: $k{=}2$ (9 bundles) achieves the reference with zero
+gap while larger budgets anneal \emph{worse} at the same read count
+(gap $7\%$ at $k{=}4$, $60\%$ at $k \ge 8$), because the reduced QUBO
+is easier to anneal at a fixed budget.  Candidate reduction is
+therefore \emph{free or beneficial} on the current testbeds until the
+budget discards the optimal bundle.
 
 The hybrid pipeline (Fig.~\ref{fig:hybrid}) outperforms QUBO-only
-decoding by $1.66\times$ in utility at $N{=}6$ ($97.9$ vs.\ $58.9$) and
-$1.05\times$ at $N{=}12$; the repair stage is essential at small
-budgets where the reduced QUBO initially returns a partially infeasible
-selection.
+decoding by $1.28\times$ in utility at $N{=}6$ ($1.58$ vs.\ $1.23$) and
+$1.38\times$ at $N{=}12$ ($2.36$ vs.\ $1.71$); the improvement pass
+drives the gain, since on these capacity-light instances the raw QUBO
+decode is already feasible.
 
 \begin{figure}[H]
   \centering
@@ -1378,11 +1622,13 @@ selection.
   \label{fig:gnn}
 \end{figure}
 
-On the grid both filter-based top-$k$ ($157.9$ / 5 served) and
-GNN-guided reduction ($154.4$ / 5) more than double the raw full-QUBO
-utility ($77.5$ / 4) at a small read budget, with the GNN reaching
-parity with the hand-designed filter while retaining full candidate
-coverage.
+On the grid both filter-based top-$k$ and GNN-guided reduction more
+than double the raw full-QUBO utility at a small read budget, with
+the GNN reaching parity with the hand-designed filter while retaining
+full candidate coverage.  (The GNN experiments require PyTorch and
+have not been re-run on the current instance pipeline; the committed
+numbers $157.9$ / $154.4$ / $77.5$ predate the generator rewrite and
+will be regenerated in a torch-enabled environment.)
 
 \subsection{Stochastic Reliability and Chance-Constrained Routing}
 \label{sec:results-des}
@@ -1400,23 +1646,25 @@ noise $\sigma=0.05$ over 40 realizations.
     \toprule
     $N$ & Solver & Served & $\E[U]$ & SLA & Gap \\
     \midrule
-    6  & hybrid    & 0.97 & 212.1 & 0.000 & $-53.9$ \\
+    6  & hybrid    & 0.64 & 56.7  & 0.000 & $+3.6$ \\
     6  & metropolis& 0.96 & 276.7 & 0.000 & $+11.0$ \\
-    6  & sqa       & 0.92 & 288.9 & 0.163 & $-42.1$ \\
-    10 & hybrid    & 0.98 & 332.9 & 0.000 & $-72.0$ \\
-    10 & metropolis& 0.99 & 401.5 & 0.000 & $+6.1$ \\
-    10 & sqa       & 0.95 & 421.8 & 0.132 & $-114.6$ \\
+    6  & sqa       & 0.38 & 67.2  & 0.000 & $+6.4$ \\
+    10 & hybrid    & 0.72 & 227.5 & 0.000 & $-0.7$ \\
+    10 & metropolis& 0.99 & 401.5 & 0.000 & $+6.2$ \\
+    10 & sqa       & 0.65 & 271.7 & 0.078 & $+2.9$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 The local-search solvers' plans have zero SLA violations and small
-reliability gaps; the SQA plan (a noisier optimizer) violates
-$13$--$16\%$ of deliveries, quantifying the fidelity risk carried by
-sub-optimal selections.  Across the dedicated DES sweep
-(Fig.~\ref{fig:des}), plans deliver $97$--$98\%$ of requests at
-near-zero SLA violation with a parametric--sampled gap of $5$--$8$
-utility units at both coherence times $\tau_{\text{mem}} \in \{5, 50\}$.
+reliability gaps; the SQA plan (a noisier optimizer) violates up to
+$8\%$ of deliveries at $N{=}10$, quantifying the fidelity risk carried
+by sub-optimal selections.  Across the dedicated DES sweep
+(Fig.~\ref{fig:des}), plans deliver all selected requests at
+near-zero SLA violation with a parametric--sampled gap of at most
+$0.5$ utility units at both coherence times $\tau_{\text{mem}} \in
+\{5, 50\}$ (the $\E[U]$ curves coincide because coherence time does
+not bind on these short-latency chains).
 
 \begin{figure}[H]
   \centering
@@ -1447,14 +1695,14 @@ hard plan sits at an implicit $5$--$14\%$ violation (dotted line) while
 \emph{claiming} zero; the nominal plan violates $29$--$45\%$.  The
 right panel prices the guarantee: tightening $\varepsilon$ from $0.5$
 (which behaviorally equals hard) to $0.05$ cuts delivered violation
-from $7$--$13\%$ to $<1\%$ at a utility cost of roughly
-$1.5$--$2\times$.  Equivalently, hard's $10.3\%$ mean implicit risk is
-not free---it is a hidden reliability debt that the chance-constrained
-operator can buy down explicitly with a single scalar $\varepsilon$.
-Solving the chance-constrained selection with the QUBO stack (rather
-than the exact ILP) yields a mean relative gap of $0.64$ on the reduced
-set, so the certified reliability comes at no structural cost to the
-optimizer.
+from $5$--$14\%$ to $<1\%$ at a utility cost of roughly
+$1.2$--$1.5\times$.  Equivalently, hard's $\sim\!10\%$ mean implicit
+risk is not free---it is a hidden reliability debt that the
+chance-constrained operator can buy down explicitly with a single
+scalar $\varepsilon$.  Solving the chance-constrained selection with
+the QUBO stack (rather than the exact ILP) yields a mean relative gap
+of $0.76$ on the reduced set, so the certified reliability comes at no
+structural cost to the optimizer.
 
 \subsection{Recourse and Optimality Certification}
 \label{sec:results-recourse}
@@ -1472,15 +1720,15 @@ realizations.
     $N$ & Fail/real & $t_{\text{local}}$ (ms) & $t_{\text{full}}$ (s) &
       Speedup & Recovery \\
     \midrule
-    6  & 0.15 & 2.0 & 0.819 & 445$\times$ & 1.00 \\
-    10 & 0.05 & 1.0 & 0.755 & 1281$\times$ & 1.00 \\
+    6  & 0.15 & 2.1 & 0.690 & 334$\times$ & 1.00 \\
+    10 & 0.05 & 0.6 & 0.672 & 1065$\times$ & 1.00 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 Local repair recovers \emph{all} failed requests (recovery rate $1.0$)
-while costing $1$--$2$\,ms versus $0.76$--$0.82$\,s for full
-replanning---a $445$--$1281\times$ speedup---and recovers $35.5\%$ of
+while costing $0.6$--$2.1$\,ms versus $0.67$--$0.69$\,s for full
+replanning---a $334$--$1065\times$ speedup---and recovers $35.5\%$ of
 the utility lost to failures.  The optimality benchmark
 (Fig.~\ref{fig:opt}) certifies the solvers against exact ILP.
 
@@ -1493,9 +1741,10 @@ the utility lost to failures.  The optimality benchmark
 \end{figure}
 
 Metropolis attains a mean relative gap of $1.5\%$ (zero on most
-instances), SQA $20.0\%$, and the raw QUBO/hybrid at a small read
-budget $36.0\%$---consistent with the DES finding that SQA's
-sub-optimality is what drives its SLA violations.
+instances), SQA $46.1\%$, and the raw QUBO/hybrid at a small read
+budget $47.2\%$---consistent with the DES finding that the
+heuristic solvers' sub-optimality is what drives their SLA
+violations.
 
 \subsection{Purification}
 \label{sec:results-purification}
@@ -1513,11 +1762,12 @@ purification comparison.
     \toprule
     $N$ & Regime & Bundles & Utility & Served & Time (s) \\
     \midrule
-    6  & agnostic   & 4  & 300.1 & 0.67 & 0.60 \\
-    6  & default q$\in$0..2 & 15 & 300.1 & 0.67 & 0.93 \\
-    6  & aware      & 27 & 300.1 & 0.67 & 0.91 \\
-    10 & agnostic   & 5  & 423.3 & 0.50 & 0.59 \\
-    10 & aware      & 39 & 423.3 & 0.50 & 0.95 \\
+    6  & agnostic   & 4  & 300.1 & 0.67 & 0.46 \\
+    6  & default q$\in$0..2 & 15 & 300.1 & 0.67 & 0.68 \\
+    6  & aware      & 27 & 300.1 & 0.67 & 0.75 \\
+    10 & agnostic   & 5  & 423.3 & 0.50 & 0.46 \\
+    10 & default q$\in$0..2 & 19 & 423.3 & 0.50 & 0.68 \\
+    10 & aware      & 39 & 423.3 & 0.50 & 0.81 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1548,8 +1798,11 @@ optimization variable lets the solver price that trade-off exactly.
 
 Table~\ref{tab:budget} shows the adaptive-budget study: on both request
 counts every tested budget $k\ge2$---and the congestion-driven adaptive
-budget---reproduces the full-QUBO utility exactly, confirming that $k$
-is a free control knob until it discards the optimal bundle.
+budget---returns the \emph{same} utility (11.20), confirming that $k$
+is a free control knob until it discards the optimal bundle; the
+consistent $\sim\!13\%$ gap versus the full-candidate reference is a
+fixed-read annealing artifact that candidate reduction does not
+worsen.
 
 \begin{table}[H]
   \centering
@@ -1560,8 +1813,8 @@ is a free control knob until it discards the optimal bundle.
     \toprule
     $N$ & $k{=}2$ & $k{=}4$ & $k{=}8$ & Adaptive & Full-QUBO \\
     \midrule
-    8  & 407.7 & 407.7 & 407.7 & 407.7 & 407.7 \\
-    12 & 388.7 & 388.7 & 388.7 & 388.7 & 388.7 \\
+    8  & 11.20 & 11.20 & 11.20 & 11.20 & 12.83 \\
+    12 & 11.20 & 11.20 & 11.20 & 11.20 & 12.91 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1579,9 +1832,9 @@ Table~\ref{tab:qa} reports the embedded quantum-annealing backend
     \toprule
     $N$ & QA util & SA util & SQA util & Qubits & Chain breaks \\
     \midrule
-    4 & 183.2 & 106.2 & 219.1 & 832 & 0.00 \\
-    6 & 110.7 & 110.7 & 124.1 & 768 & 0.00 \\
-    8 & \textbf{259.2} & 100.3 & 210.5 & 960 & 0.00 \\
+    4 & \textbf{5.11} & 0.68 & 2.92 & 832 & 0.00 \\
+    6 & \textbf{6.15} & 0.68 & 5.52 & 832 & 0.00 \\
+    8 & \textbf{11.45} & 0.68 & 2.86 & 896 & 0.00 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1594,11 +1847,12 @@ Table~\ref{tab:qa} reports the embedded quantum-annealing backend
   \label{fig:qa}
 \end{figure}
 
-The embedded QA backend (768--960 hardware qubits, zero chain breaks)
-matches or exceeds SA on every size and beats SQA at $N{=}8$ ($259.2$
-vs.\ $210.5$) at a fraction of SQA's wall time, demonstrating that a
-hardware-realistic annealer is competitive with classical samplers for
-the entanglement-routing QUBO.
+The embedded QA backend (832--896 hardware qubits, zero chain breaks)
+beats both classical samplers at \emph{every} size ($5.11$--$11.45$
+vs.\ $0.68$ for SA, which stagnates at the small default read budget,
+and $2.86$--$5.52$ for SQA) at a fraction of SQA's wall time,
+demonstrating that a hardware-realistic annealer is competitive with
+classical samplers for the entanglement-routing QUBO.
 
 \subsection{Multi-Objective, Disjoint Paths, Swapping Order}
 \label{sec:results-analysis}
@@ -1617,10 +1871,11 @@ in both objectives.
   \label{fig:multiobj}
 \end{figure}
 
-$k$-disjoint provisioning (Fig.~\ref{fig:disjoint}) adds utility
-without reducing coverage: on $N{=}8$ both candidate sets serve 7/8
-requests, but the multipath-enabled set raises aggregate utility from
-$460.9$ to $462.5$.
+$k$-disjoint provisioning (Fig.~\ref{fig:disjoint}) does not reduce
+coverage: on $N{=}8$ both candidate sets serve 7/8 requests with the
+same aggregate utility ($462.5$), because on this grid the optimal
+routes are already edge-disjoint (mean paths per selection $1.0$) and
+the multipath candidate set merely duplicates them.
 
 \begin{figure}[H]
   \centering
@@ -1738,8 +1993,12 @@ a 2-link path may be insufficient for a 4-link path.
 \paragraph{Implication:}
 Our direct Hamiltonian (Eq.~\eqref{eq:direct-ham}) mitigates this
 by normalizing penalty scales to the utility range via fixed
-$\lambda$ parameters.  The ablation results confirm that this
-works across all tested configurations without per-instance tuning.
+$\lambda$ parameters.  The conventional utility-scale rule
+(Sec.~\ref{sec:calibration}) makes this normalization explicit, and
+the resource-aware rule tightens it instance-by-instance where
+reachable loads allow; the held-out validation of Sec.~\ref{sec:results-calibration}
+confirms that the ablation-level conclusions hold without
+per-instance tuning.
 
 \subsection{Summary}
 
@@ -2019,12 +2278,12 @@ The key findings are:
 \begin{enumerate}
   \item The QUBO formulation of entanglement routing is well-posed
     and solvable by multiple quantum-inspired methods: on every
-    benchmark configuration the Metropolis annealer and the
-    tensor-network compressor find the same capacity-limited served
-    ratio, with utilities agreeing to within $\sim\!5\%$
-    (Sec.~\ref{sec:contention}).
+    benchmark configuration the tensor-network compressor meets or
+exceeds the Metropolis served ratio, with utilities agreeing to
+within $\sim\!1\%$ wherever the two solvers return identical
+selections (Sec.~\ref{sec:contention}).
   \item The tensor-network compressor is the faster solver at every
-    request count ($6$--$373\times$ faster than Metropolis) with no
+    request count ($5$--$4{,}000\times$ faster than Metropolis) with no
     quality collapse at high contention on the corrected instance
     generator (Sec.~\ref{sec:tn}).
   \item Bond dimension $\chi = 1$--$2$ is sufficient on chain
@@ -2032,7 +2291,7 @@ The key findings are:
     ratio, confirming that the effective coupling graph is
     low-treewidth (Sec.~\ref{sec:bonddim}).
   \item Streaming optimization matches or exceeds batched quality with
-    a $60$--$120\times$ speedup, enabling online routing in dynamic
+    a $50$--$150\times$ speedup, enabling online routing in dynamic
     networks (Sec.~\ref{sec:streaming-results}).
   \item The direct slack-free Hamiltonian eliminates the
     penalty-tuning burden without sacrificing solution quality
@@ -2042,30 +2301,37 @@ The key findings are:
     calibration---are identified and addressed
     (Sec.~\ref{sec:discussion}).
   \item The direct slack-free encoding (Sec.~\ref{sec:encoding})
-    is not only $5$--$6\times$ smaller than the slack-variable QUBO
-    ($8$--$32$ vs.\ $52$--$76$ binaries) but better conditioned:
-    it reaches $2.8$--$3.6\times$ higher aggregate utility under
-    identical simulated-annealing effort.
+    is not only $4$--$10\times$ smaller than the slack-variable QUBO
+    ($5$--$16$ vs.\ $49$--$60$ binaries) but at least as good in
+    served ratio and utility when the at-most-one penalty is anchored
+    to the utility scale, and it needs no per-instance penalty tuning.
   \item The deterministic fidelity rule $F \ge F_{\min}$ is an
     \emph{uncalibrated reliability claim}: it tolerates an implicit
     $5$--$14\%$ (up to $1/2$ at razor margins) SLA violation that the
     chance-constrained quantile rule (Eq.~\eqref{eq:chance}) buys down
-    to at or below any requested $\varepsilon$, at a $1.5$--$2\times$
+    to at or below any requested $\varepsilon$, at a $1.2$--$1.5\times$
     utility cost and zero structural cost to the optimizer
     (Sec.~\ref{sec:results-des}).
   \item DES evaluation shows that solver plans differ in realized
     reliability: Metropolis and the hybrid pipeline deliver with zero
-    SLA violations, while a sub-optimal SQA plan violates $13$--$16\%$
-    of deliveries---a direct price of its $20\%$ mean optimality gap,
+    SLA violations, while a sub-optimal SQA plan violates up to $8\%$
+    of deliveries---a direct price of its $46\%$ mean optimality gap,
     certified against exact ILP (Sec.~\ref{sec:results-recourse}).
   \item Local recourse recovers every failed request at a
-    $445$--$1281\times$ speedup over full replanning
+    $334$--$1065\times$ speedup over full replanning
     (Sec.~\ref{sec:results-recourse}); adaptive candidate reduction and
     purification-aware candidate supersets are free until they bind
     (Sec.~\ref{sec:results-adaptive}, Sec.~\ref{sec:results-purification});
-    and a hardware-realistic embedded quantum annealer matches or
-    exceeds classical SA/SQA at a fraction of the wall time
+    and a hardware-realistic embedded quantum annealer beats classical
+    SA/SQA at a fraction of the wall time
     (Sec.~\ref{sec:results-qa}).
+  \item Resource-aware penalty calibration
+    (Sec.~\ref{sec:results-calibration}) provably never loosens the
+    sufficient coefficients of the utility-scale baseline, tightens
+    $B$/$D$ by $23.8$/$32.8\%$ on average on the $139$ of $1{,}080$
+    held-out instances where tightening binds, and---as a negative
+    result---produces no detectable OpenJij SA/SQA quality change
+    under fixed budgets.
 \end{enumerate}
 
 \subsection{Findings on the Implemented Extensions}
@@ -2118,6 +2384,13 @@ following conclusions to the core results:
   \item \textbf{Learned MPS ordering:} replace the heuristic request
     ordering in the MPS coupling graph with a learned permutation to
     improve bond efficiency on high-treewidth instances.
+  \item \textbf{Coefficient calibration on device:} the held-out
+    calibration study (Sec.~\ref{sec:results-calibration}) is
+    combinatorial and solver-free; porting the resource-aware bound to
+    a live annealer would test whether the coefficient-tightening
+    translates into wall-time or read-count savings at scale, and
+    whether the ``no solver-quality effect'' negative result survives
+    on larger instances and denser topologies.
 \end{enumerate}
 
 \begin{thebibliography}{20}

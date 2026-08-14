@@ -133,14 +133,13 @@ def _solve_with_metropolis(bundles: List[dict], edge_capacities: dict,
                                          seed=seed)
     reduced = selector.select(bundles, k=k) if k else bundles
     optimizer = QUBOOptimizer(reduced, edge_capacities, memory_capacities)
-    n_vars = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0,
-                              memory_penalty=10.0).num_variables
+    n_vars = optimizer.to_bqm().num_variables
 
     annealer = MetropolisAnnealer(reduced, edge_capacities, memory_capacities,
                                   seed=seed)
     t0 = time.perf_counter()
-    result = annealer.solve(penalty=100.0, edge_penalty=10.0,
-                            memory_penalty=10.0, max_iterations=3000,
+    result = annealer.solve(
+                            max_iterations=3000,
                             n_restarts=1, steps_per_temperature=10)
     elapsed = time.perf_counter() - t0
 
@@ -208,7 +207,7 @@ def run_adaptive_budget_study(topology_fn: Callable,
     rows = []
     summaries = []
     for n_req in n_requests_list:
-        inst = insts["n%d" % n_req]
+        inst = insts[f"req{n_req}"]
         bundles, ec, mc = (inst["bundles"], inst["edge_capacities"],
                            inst["memory_capacities"])
         state = policy.state_features(bundles, ec, mc)

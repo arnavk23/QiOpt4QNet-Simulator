@@ -9,7 +9,7 @@ class TensorAnnealerPipeline:
         self.tn = TensorNetworkOptimizer(bundles, edge_capacities, memory_capacities)
         self.annealer = MetropolisAnnealer(bundles, edge_capacities, memory_capacities, seed=seed)
 
-    def solve(self, edge_penalty=10.0, memory_penalty=10.0,
+    def solve(self, edge_penalty=None, memory_penalty=None,
               congestion_penalty=0.05, memory_congestion_penalty=0.05,
               tn_bond_dim=8, tn_beta=5.0, tn_sweeps=15,
               anneal_max_iterations=2000, anneal_initial_temperature=3.0,
@@ -27,7 +27,6 @@ class TensorAnnealerPipeline:
         tn_selections = tn_result["selections"]
 
         anneal_result = self.annealer.solve(
-            penalty=100.0,
             edge_penalty=edge_penalty,
             memory_penalty=memory_penalty,
             congestion_penalty=congestion_penalty,

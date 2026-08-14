@@ -137,7 +137,7 @@ class StochasticEventSimulator:
 
         Returns an aggregate reliability report (see ``_aggregate`` for the
         exact schema, including ``E[U]``, ``Var[U]``, fidelity quantiles,
-        ``sla_violation_prob`` and the per-request breakdown).
+        ``sla_violation_prob``, ``n_sla_ok`` and the per-request breakdown).
         """
         bundle_map = {(b["request_id"], b["bundle_id"]): b for b in bundles}
         plan = [(rid, bid, bundle_map[(rid, bid)]) for rid, bid in selected
@@ -420,10 +420,11 @@ class StochasticEventSimulator:
         import statistics
 
         if not realizations:
+            param_exp = sum(b["utility"] for _, _, b in plan)
             return {"n_realizations": 0, "n_requests": len(plan),
-                    "param_expected_utility": sum(b["utility"]
-                                                  for _, _, b in plan),
+                    "param_expected_utility": param_exp,
                     "e_utility": 0.0, "var_utility": 0.0, "std_utility": 0.0,
+                    "utility_gap": param_exp,
                     "e_served": 0.0, "served_ratio": 0.0,
                     "e_delivered_fidelity": float("nan"),
                     "fid_q05": float("nan"), "fid_q50": float("nan"),
@@ -506,6 +507,7 @@ class StochasticEventSimulator:
             "sla_violation_prob": (sla_below / max(n_deliv, 1)) if n_deliv else 0.0,
             "e_latency": (sum(lat_all) / len(lat_all) if lat_all else float("nan")),
             "n_delivered_total": n_deliv,
+            "n_sla_ok": n_sla_ok,
             "failure_causes": cause_frac,
             "per_request": per_request,
         }

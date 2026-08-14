@@ -9,7 +9,6 @@ from experiments.instances import (
 )
 from experiments.metrics import ExperimentTracker
 from experiments.benchmark import build_metropolis, build_tensor_network
-from optimization.physics_hamiltonian import PhysicalHamiltonian
 
 OUT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "results", "experiments"))
 os.makedirs(OUT, exist_ok=True)
@@ -32,7 +31,7 @@ def run_contention_sweep():
                 for seed in [42, 43, 44]:
                     meta_sf = build_metropolis(b, ec, mc, seed=seed)
                     t0 = time.perf_counter()
-                    meta_r = meta_sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+                    meta_r = meta_sf(
                                      congestion_penalty=0.0, memory_congestion_penalty=0.0,
                                      max_iterations=5000, cooling_rate=0.97,
                                      n_restarts=1, steps_per_temperature=10)
@@ -40,7 +39,7 @@ def run_contention_sweep():
 
                     tn_sf = build_tensor_network(b, ec, mc)
                     t0 = time.perf_counter()
-                    tn_r = tn_sf(bond_dim=8, beta=5.0, edge_penalty=10.0, memory_penalty=10.0)
+                    tn_r = tn_sf(bond_dim=8, beta=5.0)
                     tt = time.perf_counter() - t0
 
                     for solver, r, t in [("Metropolis", meta_r, mt), ("TensorNetwork", tn_r, tt)]:
@@ -87,7 +86,7 @@ def run_bond_dim_sweep():
         for bd in [1, 2, 4, 8, 16, 32]:
             tn_sf = build_tensor_network(b, ec, mc)
             t0 = time.perf_counter()
-            tn_r = tn_sf(bond_dim=bd, beta=5.0, edge_penalty=10.0, memory_penalty=10.0)
+            tn_r = tn_sf(bond_dim=bd, beta=5.0)
             tt = time.perf_counter() - t0
             all_rows.append({
                 "topology": "chain_8",
@@ -102,7 +101,7 @@ def run_bond_dim_sweep():
 
         meta_sf = build_metropolis(b, ec, mc, seed=42)
         t0 = time.perf_counter()
-        meta_r = meta_sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        meta_r = meta_sf(
                          congestion_penalty=0.0, memory_congestion_penalty=0.0,
                          max_iterations=5000, cooling_rate=0.97,
                          n_restarts=1, steps_per_temperature=10)
@@ -140,7 +139,7 @@ def run_grid_comparison():
 
             meta_sf = build_metropolis(b, ec, mc, seed=42)
             t0 = time.perf_counter()
-            meta_r = meta_sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+            meta_r = meta_sf(
                              congestion_penalty=0.0, memory_congestion_penalty=0.0,
                              max_iterations=5000, cooling_rate=0.97,
                              n_restarts=1, steps_per_temperature=10)
@@ -148,7 +147,7 @@ def run_grid_comparison():
 
             tn_sf = build_tensor_network(b, ec, mc)
             t0 = time.perf_counter()
-            tn_r = tn_sf(bond_dim=8, beta=5.0, edge_penalty=10.0, memory_penalty=10.0)
+            tn_r = tn_sf(bond_dim=8, beta=5.0)
             tt = time.perf_counter() - t0
 
             for solver, r, t in [("Metropolis", meta_r, mt), ("TensorNetwork", tn_r, tt)]:
@@ -210,7 +209,7 @@ def run_streaming_comparison():
             all_bundles, topo["edge_capacities"], topo["memory_capacities"], seed=42
         )
         t0 = time.perf_counter()
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         bt = time.perf_counter() - t0
 
@@ -238,12 +237,23 @@ def run_hamiltonian_encoding_comparison():
     Both formulations are compiled through pyqubo and solved with OpenJij SA on
     identical instances, so the only difference is the constraint encoding:
     slack variables + squared-deviation terms (Eq. 5.3-5.4) vs the direct
-    max(0, .)^2 capacity terms with fixed-scale lambdas (Eq. 12.1).  We sweep
-    the penalty/constraint scale to quantify penalty sensitivity, the main
-    weakness of the slack formulation.
+    fixed-scale lambdas (Eq. 12.1).  Both use the at-most-one-bundle-per-request
+    convention (requests may be left unserved).
+
+    The one-per-request penalty is anchored to the utility scale
+    (``A = scale * u_max + eps``, the manuscript's ``A > max_{r,b} u_{r,b}``
+    rule), so the at-most-one constraint is enforced at every sweep point and
+    the ``scale`` axis measures the penalty multiplier relative to utility
+    rather than an absolute value that can fall below the utility scale.
+    Raw multi-bundle conflict rates (before repair and before collapsing to
+    the highest-utility bundle per request) are recorded explicitly so a
+    weakly enforced constraint cannot be silently masked.  Every decoded
+    selection is additionally run through the same deterministic
+    capacity/conflict repair so the reported utility reflects a feasible plan.
     """
     from optimization.physics_hamiltonian import PhysicalHamiltonian
     from optimization.openjij_solver import solve_sa
+    from optimization.conventional_calibrator import penalty_epsilon
 
     all_rows = []
     topo_fn = lambda: generate_chain_topology(n_nodes=6, edge_capacity=8,
@@ -253,61 +263,74 @@ def run_hamiltonian_encoding_comparison():
     for name, inst in instances.items():
         n_req = inst["n_requests"]
         b, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
+        p0 = max((max(0.0, float(bd["utility"])) for bd in b), default=0.0)
 
         for scale in [1.0, 10.0, 100.0, 1000.0]:
+            # Penalty anchored to the utility scale: at scale=1 every hard
+            # coefficient sits at the manuscript's A > max_{r,b} u_{r,b} rule.
+            pen = scale * p0 + penalty_epsilon(p0)
+
             # (a) Slack-variable QUBO via QUBOOptimizer (uses Placeholder A/B/D).
             slack_opt = __import__("optimization.qubo_optimizer",
                                    fromlist=["QUBOOptimizer"]).QUBOOptimizer(b, ec, mc)
             try:
-                bqm = slack_opt.to_bqm(penalty=scale, edge_penalty=scale,
-                                       memory_penalty=scale,
+                bqm = slack_opt.to_bqm(penalty=pen, edge_penalty=pen,
+                                       memory_penalty=pen,
                                        congestion_penalty=0.0,
                                        memory_congestion_penalty=0.0)
                 resp = solve_sa(bqm, num_reads=50, seed=42)
                 sel = slack_opt.decode_sample(resp.first.sample, repair=True)
-                slack_util = _u_sum(b, sel)
                 slack_vars = bqm.num_variables
+                slack_conflict_rate, slack_mean_multi = _raw_conflict_stats(slack_opt, resp)
             except Exception:
-                sel, slack_util, slack_vars = [], 0.0, 0
+                sel, slack_vars = [], 0
+                slack_conflict_rate = slack_mean_multi = float("nan")
 
             # (b) Direct slack-free Hamiltonian (Eq. 12.1), same solver backend:
             # only |B| binary variables, no LogEncInteger slack variables.
             phys = PhysicalHamiltonian(b, ec, mc)
             try:
                 q, offset = phys.to_qubo_slackfree(
-                    utility_weight=1.0, one_per_request_weight=scale,
-                    congestion_weight=scale, memory_ratio_weight=scale)
+                    utility_weight=1.0, one_per_request_weight=pen,
+                    congestion_weight=pen, memory_ratio_weight=pen)
                 dqm = dimod.BQM.from_qubo(q, offset)
                 resp = solve_sa(dqm, num_reads=50, seed=42)
                 var = resp.first.sample
                 var["x_0"] = var.get("x_0", 0)
-                sel2 = [k for k in phys.decode(var)]
-                direct_util = _u_sum(b, sel2)
+                sel2 = slack_opt.repair_selection([k for k in phys.decode(var)])
                 direct_vars = dqm.num_variables
+                direct_conflict_rate, direct_mean_multi = _raw_conflict_stats(phys, resp)
             except Exception:
-                sel2, direct_util, direct_vars = [], 0.0, 0
+                sel2, direct_vars = [], 0
+                direct_conflict_rate = direct_mean_multi = float("nan")
 
             # (c) Direct Hamiltonian driven by the Metropolis annealer
-            # (no slack variables by construction, incremental local moves).
+            # (no slack variables by construction, incremental local moves;
+            # enforces at-most-one by construction, so the raw conflict rate
+            # is zero by design).
             meta_sf = build_metropolis(b, ec, mc, seed=42)
-            meta_r = meta_sf(penalty=scale, edge_penalty=scale, memory_penalty=scale,
+            meta_r = meta_sf(penalty=pen, edge_penalty=pen, memory_penalty=pen,
                              congestion_penalty=0.0, memory_congestion_penalty=0.0,
                              max_iterations=3000, n_restarts=1, steps_per_temperature=10)
-            meta_util = _u_sum(b, meta_r.get("selected", []))
+            meta_sel = meta_r.get("selected", [])
 
-            for formulation, sel, u, n_vars in [("Slack-QUBO", sel, slack_util, slack_vars),
-                                                ("Direct-QUBO", sel2, direct_util, direct_vars),
-                                                ("Direct-Metropolis", meta_r.get("selected", []), meta_util, len(b))]:
+            for formulation, sel, n_vars, cr, mm in [
+                ("Slack-QUBO", sel, slack_vars, slack_conflict_rate, slack_mean_multi),
+                ("Direct-QUBO", sel2, direct_vars, direct_conflict_rate, direct_mean_multi),
+                ("Direct-Metropolis", meta_sel, len(b), 0.0, 0.0),
+            ]:
                 # A request is served if at least one of its bundles is
                 # selected; keep the highest-utility bundle per request so
-                # the served ratio is comparable across formulations even
-                # when the one-per-request penalty is weakly enforced.
+                # served ratio and utility are comparable across formulations
+                # even when the one-per-request penalty is weakly enforced.
+                # The raw conflict rate above reports the pre-repair samples.
                 best = {}
                 for k in sel:
                     u_k = _u_sum(b, [k])
                     if u_k > best.get(k[0], -1e18):
                         best[k[0]] = u_k
                 served = len(best)
+                plan_util = sum(best.values())
                 all_rows.append({
                     "instance": name,
                     "n_requests": n_req,
@@ -315,8 +338,10 @@ def run_hamiltonian_encoding_comparison():
                     "formulation": formulation,
                     "served": served,
                     "served_ratio": served / max(n_req, 1),
-                    "utility": u,
+                    "utility": plan_util,
                     "n_vars": n_vars,
+                    "raw_conflict_rate": cr,
+                    "raw_mean_multi_bundle": mm,
                 })
 
     path = os.path.join(OUT, "hamiltonian_encoding_comparison.csv")
@@ -326,6 +351,32 @@ def run_hamiltonian_encoding_comparison():
         w.writerows(all_rows)
     print(f"Wrote {len(all_rows)} rows to {path}")
     return all_rows
+
+
+def _raw_conflict_stats(decoder, resp):
+    """Raw at-most-one violation statistics over all reads (no repair/masking).
+
+    Returns (fraction of reads with at least one request selecting >1 bundle,
+    mean number of requests selecting >1 bundle per read).
+    """
+    n_reads = 0
+    n_conflict = 0
+    n_multi_total = 0
+    for sample in resp.samples():
+        if hasattr(decoder, "decode_sample"):
+            selected = decoder.decode_sample(sample)
+        else:
+            selected = decoder.decode(sample)
+        counts = {}
+        for rid, _bid in selected:
+            counts[rid] = counts.get(rid, 0) + 1
+        n_multi = sum(1 for c in counts.values() if c > 1)
+        n_conflict += 1 if n_multi > 0 else 0
+        n_multi_total += n_multi
+        n_reads += 1
+    if n_reads == 0:
+        return float("nan"), float("nan")
+    return n_conflict / n_reads, n_multi_total / n_reads
 
 
 def _u_sum(bundles, selected):
@@ -428,7 +479,7 @@ def run_robust_routing_experiments():
             w.writerows(rows)
         print(f"Wrote {len(rows)} rows to {path}")
 
-    kw = dict(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+    kw = dict(
               max_iterations=5000, n_restarts=3, steps_per_temperature=10)
 
     # (a) Decision-criterion comparison on the fragile bottleneck (exact).
@@ -736,10 +787,10 @@ def run_des_reliability_experiments():
         topo = generate_chain_topology(n_nodes=10, edge_capacity=8,
                                        memory_capacity=12, raw_fidelity=0.85)
         inst = contention_sweep_instances(lambda: topo, [n_req],
-                                          seed=42)["n%d" % n_req]
+                                          seed=42)[f"req{n_req}"]
         b, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
         sf = build_metropolis(b, ec, mc, seed=42)
-        r = sf(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = sf(
                max_iterations=3000)
         for tau_mem in [5.0, 50.0]:
             for swap_success in [0.90, 0.95, 1.0]:

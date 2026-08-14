@@ -40,7 +40,6 @@ def main():
     print("\n--- Optimizer A: Metropolis Annealer ---")
     annealer = MetropolisAnnealer(opt_bundles, edge_caps, mem_caps, seed=42)
     result_a = annealer.solve(
-        penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
         max_iterations=2000, initial_temperature=10.0, cooling_rate=0.97
     )
     print(f"  Selected bundles: {result_a['selected']}")
@@ -48,7 +47,7 @@ def main():
 
     print("\n--- Optimizer B: Tensor-Network Compressor ---")
     tn_opt = TensorNetworkOptimizer(opt_bundles, edge_caps, mem_caps)
-    result_b = tn_opt.solve(edge_penalty=10.0, memory_penalty=10.0, bond_dim=4, beta=5.0)
+    result_b = tn_opt.solve(bond_dim=4, beta=5.0)
     print(f"  Selected bundles: {result_b['selected']}")
 
     print("\n" + "=" * 60)

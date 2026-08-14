@@ -83,9 +83,16 @@ dropped into `baselines/feasibility.py`'s comparison tooling interchangeably.
 python3 -m venv .venv
 source .venv/bin/activate    # or .venv\Scripts\activate on Windows
 
-pip install numpy networkx matplotlib simpy dimod openjij pyqubo scikit-learn pytest
-pip install ortools           # optional: enables the exact CP-SAT baseline
+pip install -r requirements.txt        # core solvers (pinned)
+pip install "qiopt4qnet[baselines]"    # optional: CP-SAT oracle + ML ranking baseline
+pip install pytest                     # only needed for the test suite
 ```
+
+Versions are pinned in `pyproject.toml`/`requirements.txt` to the
+environment `RESEARCH_FINDINGS.md` was run on. `minorminer` (quantum-annealing
+minor embedding) is a required core dependency; `ortools` (exact CP-SAT
+baseline) and `scikit-learn` (legacy ML ranking baseline) are optional and
+install via the `[baselines]` extra.
 
 (If your environment enforces PEP 668, add `--break-system-packages` to
 the pip commands, or just use a venv as above.)

@@ -251,13 +251,13 @@ def topology_sweep(topology_fns: Dict[str, Callable],
     for family, fn in topology_fns.items():
         topo = fn()
         inst = contention_sweep_instances(lambda: topo, [n_requests],
-                                          seed=seed)["n%d" % n_requests]
+                                          seed=seed)[f"req{n_requests}"]
         b, ec, mc = inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
         util_of = {(bb["request_id"], bb["bundle_id"]): bb["utility"] for bb in b}
 
         opt = MetropolisAnnealer(b, ec, mc, seed=seed)
         t0 = time.perf_counter()
-        r = opt.solve(penalty=100.0, edge_penalty=10.0, memory_penalty=10.0,
+        r = opt.solve(
                       max_iterations=3000, n_restarts=1, steps_per_temperature=10)
         elapsed = time.perf_counter() - t0
 

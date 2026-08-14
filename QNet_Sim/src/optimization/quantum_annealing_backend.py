@@ -187,8 +187,7 @@ def quantum_anneal_solve(bundles: List[dict], edge_capacities: dict,
                                          seed=seed)
     reduced = selector.select(bundles, k=k) if k else bundles
     optimizer = QUBOOptimizer(reduced, edge_capacities, memory_capacities)
-    bqm = optimizer.to_bqm(penalty=100.0, edge_penalty=10.0,
-                           memory_penalty=10.0,
+    bqm = optimizer.to_bqm(
                            congestion_penalty=0.0, memory_congestion_penalty=0.0)
 
     if chain_strength is None:
@@ -318,7 +317,7 @@ def run_quantum_annealing_sweep(topology_fn: Callable,
     insts = contention_sweep_instances(topology_fn, n_requests_list, seed=seed)
     rows = []
     for n_req in n_requests_list:
-        inst = insts["n%d" % n_req]
+        inst = insts[f"req{n_req}"]
         bundles, ec, mc = (inst["bundles"], inst["edge_capacities"],
                            inst["memory_capacities"])
 
@@ -331,8 +330,7 @@ def run_quantum_annealing_sweep(topology_fn: Callable,
         selector = AdaptiveCandidateSelector(ec, mc, seed=seed)
         reduced = selector.select(bundles, k=k)
         opt = QUBOOptimizer(reduced, ec, mc)
-        bqm = opt.to_bqm(penalty=100.0, edge_penalty=10.0,
-                         memory_penalty=10.0)
+        bqm = opt.to_bqm()
         t0 = time.perf_counter()
         sqa_resp = solve_sqa(bqm, num_reads=num_reads, seed=seed)
         sqa_sel = opt.decode_sample(sqa_resp.first.sample, repair=True)

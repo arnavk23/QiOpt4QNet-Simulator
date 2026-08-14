@@ -22,7 +22,7 @@ def _topology(n_nodes=8, mem=10, raw=0.85):
 def _bundles(n_req=4, seed=42):
     topo = _topology()
     inst = contention_sweep_instances(lambda: topo, [n_req], seed=seed)[
-        "n%d" % n_req]
+        f"req{n_req}"]
     return topo, inst["bundles"], inst["edge_capacities"], inst["memory_capacities"]
 
 
