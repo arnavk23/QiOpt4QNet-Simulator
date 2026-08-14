@@ -36,6 +36,7 @@ def write_csv(path, rows):
         writer = csv.DictWriter(
             handle,
             fieldnames=list(rows[0].keys()),
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -196,6 +197,11 @@ def main():
             - float(conventional["raw_feasible_rate"])
         )
 
+        overload_difference = (
+            float(resource_aware["raw_mean_overload_units"])
+            - float(conventional["raw_mean_overload_units"])
+        )
+
         repaired_ra = float(
             resource_aware[
                 "repaired_optimality_gap_pct"
@@ -225,6 +231,12 @@ def main():
 
         instance_differences[
             instance_key
+        ]["raw_mean_overload_units"].append(
+            overload_difference
+        )
+
+        instance_differences[
+            instance_key
         ]["repaired_optimality_gap_pct"].append(
             repaired_gap_difference
         )
@@ -250,6 +262,22 @@ def main():
             sampler
         ]["raw_feasible_rate"].append(
             statistics.fmean(feasibility_values)
+        )
+
+        overload_values = metrics[
+            "raw_mean_overload_units"
+        ]
+
+        if len(overload_values) != 5:
+            raise RuntimeError(
+                f"Expected 5 solver seeds for {instance_key}, "
+                f"found {len(overload_values)}"
+            )
+
+        sampler_values[
+            sampler
+        ]["raw_mean_overload_units"].append(
+            statistics.fmean(overload_values)
         )
 
         repaired_values = [
@@ -304,6 +332,27 @@ def main():
                 sampler=sampler,
                 metric="repaired_optimality_gap_pct",
                 values=repaired_gap,
+                lower_is_better=True,
+                bootstrap_seed=(
+                    BOOTSTRAP_SEED + seed_offset
+                ),
+            )
+        )
+        seed_offset += 1
+
+    # Append the robustness metric after the existing rows so the bootstrap
+    # seeds, and therefore the reported confidence intervals, remain stable
+    # for the previously published feasibility and solution-quality results.
+    for sampler in ["sa", "sqa"]:
+        overload = sampler_values[
+            sampler
+        ]["raw_mean_overload_units"]
+
+        summary_rows.append(
+            summarize_differences(
+                sampler=sampler,
+                metric="raw_mean_overload_units",
+                values=overload,
                 lower_is_better=True,
                 bootstrap_seed=(
                     BOOTSTRAP_SEED + seed_offset
